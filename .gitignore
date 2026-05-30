@@ -1,0 +1,15 @@
+# Entorno virtual
+venv/
+
+# Base de datos local (cada quien la reconstruye)
+*.db
+
+# Archivos de VS Code
+.vscode/
+
+# Variables de entorno reales (credenciales)
+.env
+
+# Caché de Python
+__pycache__/
+*.pyc
