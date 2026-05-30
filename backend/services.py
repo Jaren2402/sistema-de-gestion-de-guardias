@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta
 from typing import Tuple
 from sqlmodel import Session, select, delete
 from models import Soldado, Guardia, Asignacion, Restriccion, PuntoGuardia
@@ -182,7 +182,7 @@ def obtener_calendario(mes: int, año: int, session: Session) -> dict:
         .where(
             Guardia.fecha_inicio >= inicio,
             Guardia.fecha_inicio < proximo_mes,
-            Asignacion.es_titular == True
+            Asignacion.es_titular
         )
         .order_by(Guardia.fecha_inicio, PuntoGuardia.nombre)
     )

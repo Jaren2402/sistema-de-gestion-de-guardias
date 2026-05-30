@@ -1,6 +1,5 @@
 import flet as ft
 import httpx
-import asyncio
 from config import URL_BACKEND
 
 
