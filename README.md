@@ -278,6 +278,7 @@ cd backend && uvicorn main:app --reload
 - [ ] Sustitución de emergencia
 - [ ] Generación y envío de PDF
 - [ ] Dashboard de estadísticas
+- [x] Protección de rama y flujo de Pull Request
 
 ---
 
