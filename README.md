@@ -26,7 +26,7 @@ graph LR
 
     Reasignar -.->|include| Asignar
     Difundir -.->|extend| GenerarPDF
-
+```
 ---
 
 ## 🧱 2. Diagrama de Arquitectura
@@ -61,7 +61,7 @@ graph TD
     ManejoErrores -->|"Reintentos / Logs"| WhatsApp
     ManejoErrores -->|"Reintentos / Logs"| Telegram
     Logica -.->|"Lectura de credenciales"| Env
-
+```
 ---
 
 ## 🗃️ 3. Diagrama Entidad-Relación (ER)
@@ -114,7 +114,7 @@ erDiagram
         DATE fecha_fin
         TEXT motivo
     }
-
+```
 ---
 
 ## 🔁 4. Diagrama de Flujo – Asignación Automática
@@ -138,7 +138,7 @@ graph TD
     RevisarRest --> Inicio
 
     style Titulo1 fill:none,stroke:none,color:#000
-
+```
 ---
 
 ## 🔁 5. Diagrama de Flujo – Reasignación de Emergencia
@@ -163,7 +163,7 @@ graph TD
     RevisarReg --> Inicio
 
     style Titulo2 fill:none,stroke:none,color:#000
-
+```
 ---
 
 ## 🔄 6. Diagrama de Secuencia – Flujo Completo del Sistema
@@ -238,7 +238,7 @@ sequenceDiagram
         API-->>UI: Notificar fallo
         UI-->>Admin: Alerta: difusión fallida
     end
-
+```
 ---
 
 ## 🛠️ Stack Tecnológico
@@ -266,7 +266,7 @@ source venv/bin/activate  # En Windows: venv\Scripts\activate
 pip install -r requirements.txt
 cp .env.example .env  # Configurar variables de entorno
 cd backend && uvicorn main:app --reload
-
+```
 ---
 
 ## 🚀 Estado del Proyecto
