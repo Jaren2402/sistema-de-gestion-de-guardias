@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta
 from typing import Tuple
 from sqlmodel import Session, select, delete
 from models import Soldado, Guardia, Asignacion, Restriccion, PuntoGuardia
