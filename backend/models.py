@@ -46,6 +46,7 @@ class Asignacion(SQLModel, table=True):
     fecha_asignacion:       datetime = Field(default_factory=datetime.utcnow)
     es_titular:             bool = Field(default=True) # false si es reemplazo
     id_asignacion_original: Optional[int] = Field(default=None, foreign_key="asignacion.id_asignacion", nullable=True)
+    es_anulada:             bool = Field(default=False)
     
 # Tabla restricción
 class Restriccion(SQLModel, table=True):
@@ -56,5 +57,11 @@ class Restriccion(SQLModel, table=True):
     id_soldado:     int = Field(foreign_key="soldado.id_soldado")
     fecha_inicio:   date  
     fecha_fin:      date       
-    motivo:         str       # "Permiso", "Enfermedad", "Viaje", etc.
+    motivo:         str       # "Permiso", "Viaje", etc.
     
+class Novedad(SQLModel, table=True):
+    __tablename__ = "novedad"
+    id_novedad: Optional[int] = Field(default=None, primary_key=True)
+    id_asignacion: int = Field(foreign_key="asignacion.id_asignacion")
+    descripcion: str
+    fecha_reporte: datetime = Field(default_factory=datetime.utcnow)
