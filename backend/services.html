@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Python: module services</title>
+</head><body>
+
+<table class="heading">
+<tr class="heading-text decor">
+<td class="title">&nbsp;<br><strong class="title">services</strong></td>
+<td class="extra"><a href=".">index</a><br><a href="file:c%3A%5Cusers%5Cjaren%5Conedrive%5Cdesktop%5Capp%20militar%5Cbackend%5Cservices.py">c:\users\jaren\onedrive\desktop\app militar\backend\services.py</a></td></tr></table>
+    <p></p>
+<p>
+<table class="section">
+<tr class="decor pkg-content-decor heading-text">
+<td class="section-title" colspan=3>&nbsp;<br><strong class="bigsection">Modules</strong></td></tr>
+    
+<tr><td class="decor pkg-content-decor"><span class="code">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></td><td>&nbsp;</td>
+<td class="singlecolumn"><table><tr><td class="multicolumn"><a href="reportlab.lib.colors.html">reportlab.lib.colors</a><br>
+</td><td class="multicolumn"><a href="random.html">random</a><br>
+</td><td class="multicolumn"></td><td class="multicolumn"></td></tr></table></td></tr></table><p>
+<table class="section">
+<tr class="decor functions-decor heading-text">
+<td class="section-title" colspan=3>&nbsp;<br><strong class="bigsection">Functions</strong></td></tr>
+    
+<tr><td class="decor functions-decor"><span class="code">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></td><td>&nbsp;</td>
+<td class="singlecolumn"><dl><dt><a name="-actualizar_soldado"><strong>actualizar_soldado</strong></a>(
+    id_soldado: int,
+    cedula: str,
+    nombre: str,
+    apellido: str,
+    rango: str,
+    unidad: str,
+    session: Session
+) -&gt; dict</dt><dd><span class="code">Actualiza&nbsp;los&nbsp;datos&nbsp;de&nbsp;un&nbsp;soldado&nbsp;existente.</span></dd></dl>
+ <dl><dt><a name="-buscar_candidatos_sustitucion"><strong>buscar_candidatos_sustitucion</strong></a>(id_asignacion_original: int, session: Session) -&gt; dict</dt><dd><span class="code">Busca&nbsp;los&nbsp;mejores&nbsp;candidatos&nbsp;para&nbsp;sustituir&nbsp;a&nbsp;un&nbsp;soldado,&nbsp;incluyendo&nbsp;intercambios&nbsp;directos.</span></dd></dl>
+ <dl><dt><a name="-confirmar_sustitucion"><strong>confirmar_sustitucion</strong></a>(
+    id_asignacion_original: int,
+    id_nuevo_soldado: int,
+    session: Session
+) -&gt; dict</dt><dd><span class="code">Realiza&nbsp;la&nbsp;sustitución&nbsp;simple:&nbsp;anula&nbsp;la&nbsp;original&nbsp;y&nbsp;crea&nbsp;una&nbsp;nueva&nbsp;asignación&nbsp;titular.</span></dd></dl>
+ <dl><dt><a name="-confirmar_trueque"><strong>confirmar_trueque</strong></a>(
+    id_asignacion_A: int,
+    id_asignacion_B: int,
+    id_soldado_B: int,
+    session: Session
+) -&gt; dict</dt><dd><span class="code">Intercambia&nbsp;los&nbsp;soldados&nbsp;de&nbsp;dos&nbsp;guardias&nbsp;(trueque&nbsp;binario).</span></dd></dl>
+ <dl><dt><a name="-crear_novedad"><strong>crear_novedad</strong></a>(id_asignacion: int, descripcion: str, session: Session) -&gt; dict</dt><dd><span class="code">Registra&nbsp;una&nbsp;novedad&nbsp;para&nbsp;una&nbsp;asignación&nbsp;de&nbsp;guardia.</span></dd></dl>
+ <dl><dt><a name="-crear_punto"><strong>crear_punto</strong></a>(nombre: str, descripcion: str, session: Session) -&gt; dict</dt></dl>
+ <dl><dt><a name="-crear_soldado"><strong>crear_soldado</strong></a>(
+    cedula: str,
+    nombre: str,
+    apellido: str,
+    rango: str,
+    unidad: str,
+    session: Session
+) -&gt; dict</dt><dd><span class="code">Crea&nbsp;un&nbsp;nuevo&nbsp;soldado&nbsp;y&nbsp;lo&nbsp;guarda&nbsp;en&nbsp;la&nbsp;base&nbsp;de&nbsp;datos.</span></dd></dl>
+ <dl><dt><a name="-editar_punto"><strong>editar_punto</strong></a>(id_punto: int, nombre: str, descripcion: str, session: Session) -&gt; dict</dt></dl>
+ <dl><dt><a name="-eliminar_punto"><strong>eliminar_punto</strong></a>(id_punto: int, session: Session) -&gt; dict</dt></dl>
+ <dl><dt><a name="-eliminar_soldado"><strong>eliminar_soldado</strong></a>(id_soldado: int, session: Session) -&gt; dict</dt><dd><span class="code">Elimina&nbsp;un&nbsp;soldado&nbsp;de&nbsp;la&nbsp;base&nbsp;de&nbsp;datos.</span></dd></dl>
+ <dl><dt><a name="-generar_calendario"><strong>generar_calendario</strong></a>(mes: int, año: int, session: Session) -&gt; dict</dt><dd><span class="code">Genera&nbsp;el&nbsp;calendario&nbsp;de&nbsp;guardias&nbsp;para&nbsp;un&nbsp;mes&nbsp;completo.<br>
+Limpia&nbsp;el&nbsp;mes&nbsp;anterior,&nbsp;crea&nbsp;turnos&nbsp;para&nbsp;cada&nbsp;punto&nbsp;de&nbsp;guardia,<br>
+respetando&nbsp;48&nbsp;horas&nbsp;de&nbsp;descanso,&nbsp;restricciones&nbsp;y&nbsp;asignando&nbsp;con&nbsp;equidad.</span></dd></dl>
+ <dl><dt><a name="-generar_pdf"><strong>generar_pdf</strong></a>(mes: int, año: int, session: Session) -&gt; BytesIO</dt><dd><span class="code">Genera&nbsp;un&nbsp;PDF&nbsp;del&nbsp;calendario&nbsp;de&nbsp;guardias&nbsp;de&nbsp;un&nbsp;mes.<br>
+Formato&nbsp;vertical&nbsp;(A4).&nbsp;Una&nbsp;tabla&nbsp;por&nbsp;página,&nbsp;centrada&nbsp;y&nbsp;compacta.</span></dd></dl>
+ <dl><dt><a name="-listar_novedades"><strong>listar_novedades</strong></a>(mes: int, año: int, session: Session) -&gt; list</dt><dd><span class="code">Devuelve&nbsp;todas&nbsp;las&nbsp;novedades&nbsp;de&nbsp;un&nbsp;mes,&nbsp;con&nbsp;datos&nbsp;de&nbsp;la&nbsp;guardia&nbsp;y&nbsp;el&nbsp;soldado.</span></dd></dl>
+ <dl><dt><a name="-listar_puntos"><strong>listar_puntos</strong></a>(session: Session)</dt></dl>
+ <dl><dt><a name="-obtener_calendario"><strong>obtener_calendario</strong></a>(mes: int, año: int, session: Session) -&gt; dict</dt><dd><span class="code">Devuelve&nbsp;el&nbsp;calendario&nbsp;de&nbsp;guardias&nbsp;generado&nbsp;para&nbsp;un&nbsp;mes,<br>
+organizado&nbsp;como&nbsp;lista&nbsp;plana&nbsp;con&nbsp;todos&nbsp;los&nbsp;detalles&nbsp;del&nbsp;soldado.</span></dd></dl>
+ <dl><dt><a name="-obtener_estadisticas"><strong>obtener_estadisticas</strong></a>(mes: int, año: int, session: Session) -&gt; dict</dt><dd><span class="code">Devuelve&nbsp;estadísticas&nbsp;completas&nbsp;del&nbsp;mes:&nbsp;KPIs,&nbsp;equidad,&nbsp;rankings&nbsp;y&nbsp;detalles&nbsp;de&nbsp;incidencias.</span></dd></dl>
+ <dl><dt><a name="-obtener_ficha_soldado"><strong>obtener_ficha_soldado</strong></a>(id_soldado: int, mes: int, año: int, session: Session) -&gt; dict</dt><dd><span class="code">Devuelve&nbsp;el&nbsp;historial&nbsp;de&nbsp;guardias&nbsp;de&nbsp;un&nbsp;soldado&nbsp;en&nbsp;un&nbsp;mes.</span></dd></dl>
+ <dl><dt><a name="-obtener_historial_sustituciones"><strong>obtener_historial_sustituciones</strong></a>(mes: int, año: int, session: Session) -&gt; list</dt><dd><span class="code">Devuelve&nbsp;el&nbsp;historial&nbsp;de&nbsp;sustituciones&nbsp;de&nbsp;un&nbsp;mes,&nbsp;con&nbsp;trueques&nbsp;enriquecidos.</span></dd></dl>
+</td></tr></table><p>
+<table class="section">
+<tr class="decor data-decor heading-text">
+<td class="section-title" colspan=3>&nbsp;<br><strong class="bigsection">Data</strong></td></tr>
+    
+<tr><td class="decor data-decor"><span class="code">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></td><td>&nbsp;</td>
+<td class="singlecolumn"><strong>A4</strong> = (595.2755905511812, 841.8897637795277)<br>
+<strong>FACTOR_FIN_SEMANA</strong> = 1.5<br>
+<strong>FACTOR_TURNO</strong> = {'diurno': 1.0, 'nocturno': 2.0}<br>
+<strong>PRIORIDAD_RANGO</strong> = {'cabo primero': 2, 'cabo segundo': 1, 'capitán': 8, 'primer teniente': 7, 'sargento mayor': 5, 'sargento primero': 4, 'sargento segundo': 3, 'teniente': 6}<br>
+<strong>Tuple</strong> = typing.Tuple</td></tr></table>
+</body></html>

@@ -285,3 +285,14 @@ cd backend && uvicorn main:app --reload
 ## 📄 Licencia
 
 Este proyecto es de uso académico.
+
+---
+
+## 📄 Documentación
+
+Para generar la documentación técnica del módulo de servicios, ejecute:
+
+```bash
+cd backend
+python -m pydoc -w services
+```
