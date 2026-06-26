@@ -7,7 +7,7 @@ import random
 
 # Imports para el PDF
 from io import BytesIO
-from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
@@ -80,7 +80,6 @@ def generar_calendario(mes: int, año: int, session: Session) -> dict:
         mes_anterior = mes - 1
         año_anterior = año
 
-    inicio_mes_anterior = datetime(año_anterior, mes_anterior, 1)
     if mes_anterior == 12:
         fin_mes_anterior = datetime(año_anterior + 1, 1, 1) - timedelta(days=1)
     else:
@@ -92,7 +91,7 @@ def generar_calendario(mes: int, año: int, session: Session) -> dict:
         select(Asignacion)
         .join(Guardia)
         .where(
-            Asignacion.es_titular == True,
+            Asignacion.es_titular,
             Guardia.fecha_inicio >= fecha_consulta,
             Guardia.fecha_inicio <= fin_mes_anterior
         )
@@ -293,8 +292,8 @@ def buscar_candidatos_sustitucion(id_asignacion_original: int, session: Session)
             .join(Guardia)
             .where(
                 Asignacion.id_soldado == s.id_soldado,
-                Asignacion.es_titular == True,
-                Asignacion.es_anulada == False,
+                Asignacion.es_titular,
+                not Asignacion.es_anulada,
                 Guardia.fecha_inicio >= inicio_mes,
                 Guardia.fecha_inicio <= fin_mes
             )
@@ -332,8 +331,8 @@ def buscar_candidatos_sustitucion(id_asignacion_original: int, session: Session)
                 .join(Asignacion)
                 .where(
                     Asignacion.id_soldado == s.id_soldado,
-                    Asignacion.es_titular == True,
-                    Asignacion.es_anulada == False,
+                    Asignacion.es_titular,
+                    not Asignacion.es_anulada,
                     Guardia.fecha_inicio > fecha_guardia
                 )
                 .order_by(Guardia.fecha_inicio)
@@ -407,8 +406,8 @@ def _puede_cubrir_guardia(soldado: Soldado, fecha_guardia: datetime, session: Se
         .join(Guardia)
         .where(
             Asignacion.id_soldado == soldado.id_soldado,
-            Asignacion.es_titular == True,
-            Asignacion.es_anulada == False,
+            Asignacion.es_titular,
+            not Asignacion.es_anulada,
             Guardia.fecha_fin < fecha_guardia
         )
         .order_by(Guardia.fecha_fin.desc())
@@ -508,7 +507,7 @@ def obtener_ficha_soldado(id_soldado: int, mes: int, año: int, session: Session
             Asignacion.id_soldado == id_soldado,
             Guardia.fecha_inicio >= inicio,
             Guardia.fecha_inicio < proximo_mes,
-            Asignacion.es_anulada == False   
+            not Asignacion.es_anulada   
         )
         .order_by(Guardia.fecha_inicio)
     )
@@ -664,8 +663,8 @@ def generar_pdf(mes: int, año: int, session: Session) -> BytesIO:
         .where(
             Guardia.fecha_inicio >= inicio,
             Guardia.fecha_inicio < proximo_mes,
-            Asignacion.es_titular == True,
-            Asignacion.es_anulada == False,
+            Asignacion.es_titular,
+            not Asignacion.es_anulada,
         )
         .order_by(PuntoGuardia.nombre, Guardia.fecha_inicio, Guardia.tipo)
     )
@@ -803,7 +802,7 @@ def listar_novedades(mes: int, año: int, session: Session) -> list:
         .where(
             Guardia.fecha_inicio >= inicio,
             Guardia.fecha_inicio < proximo_mes,
-            Asignacion.es_anulada == False,
+            not Asignacion.es_anulada,
         )
         .order_by(Guardia.fecha_inicio.desc())
     )
@@ -840,8 +839,8 @@ def obtener_estadisticas(mes: int, año: int, session: Session) -> dict:
         .where(
             Guardia.fecha_inicio >= inicio,
             Guardia.fecha_inicio < proximo_mes,
-            Asignacion.es_titular == True,
-            Asignacion.es_anulada == False
+            Asignacion.es_titular,
+            not Asignacion.es_anulada
         )
     )
     titulares = session.exec(query_titulares).all()
@@ -854,7 +853,7 @@ def obtener_estadisticas(mes: int, año: int, session: Session) -> dict:
         .where(
             Guardia.fecha_inicio >= inicio,
             Guardia.fecha_inicio < proximo_mes,
-            Asignacion.es_titular == False
+            not Asignacion.es_titular
         )
     )
     sustituciones_data = session.exec(query_sustituciones).all()
