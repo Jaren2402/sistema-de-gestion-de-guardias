@@ -5,7 +5,7 @@ on:
     branches: [ main ]
 
 jobs:
-  lint:
+  lint-and-test:
     runs-on: ubuntu-latest
     steps:
       - name: Descargar código
@@ -16,10 +16,15 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Instalar dependencias
+      - name: Instalar dependencias del proyecto
+        run: |
+          pip install fastapi uvicorn sqlmodel pandas flet httpx openpyxl reportlab pytest
+
+      - name: Ejecutar linter (ruff)
         run: |
           pip install ruff
-
-      - name: Verificar estilo de código
-        run: |
           ruff check .
+
+      - name: Ejecutar pruebas unitarias (pytest)
+        run: |
+          pytest tests/test_services.py -v
