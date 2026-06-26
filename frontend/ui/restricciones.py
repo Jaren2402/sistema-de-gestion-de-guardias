@@ -1,5 +1,6 @@
 import flet as ft
 import httpx
+import asyncio
 from config import URL_BACKEND
 
 
@@ -26,27 +27,36 @@ def build(page: ft.Page):
     )
 
     # --- Funciones asíncronas ---
-    async def cargar_dropdown():
-        """Llena el dropdown de soldados inmediatamente, sin reintentos."""
-        try:
-            async with httpx.AsyncClient() as cliente:
-                resp = await cliente.get(f"{URL_BACKEND}/soldados")
-                datos = resp.json()
-                if datos:
-                    selector_soldado.options = [
-                        ft.dropdown.Option(
-                            key=str(s["id_soldado"]),
-                            text=f"{s['nombre']} {s['apellido']} ({s['cedula']})"
-                        )
-                        for s in datos
-                    ]
-                    print(f"✅ Dropdown cargado con {len(datos)} soldados.")
-                else:
-                    print("ℹ️ No hay soldados en la base de datos.")
-        except Exception as ex:
-            print(f"⏳ No se pudo cargar el dropdown: {ex}")
-        finally:
-            page.update()
+    async def cargar_dropdown(max_intentos=3):
+        """Llena el dropdown de soldados con reintentos automáticos."""
+        intentos = 0
+        while intentos < max_intentos:
+            try:
+                async with httpx.AsyncClient() as cliente:
+                    resp = await cliente.get(f"{URL_BACKEND}/soldados")
+                    datos = resp.json()
+                    if datos:
+                        selector_soldado.options = [
+                            ft.dropdown.Option(
+                                key=str(s["id_soldado"]),
+                                text=f"{s['nombre']} {s['apellido']} ({s['cedula']})"
+                            )
+                            for s in datos
+                        ]
+                        texto_estado.value = "✅ Lista de soldados cargada."
+                        texto_estado.color = ft.Colors.GREEN
+                        print(f"✅ Dropdown cargado con {len(datos)} soldados.")
+                        page.update()
+                        return
+            except Exception as ex:
+                print(f"⏳ Intento {intentos+1} fallido. Reintentando... ({ex})")
+            intentos += 1
+            await asyncio.sleep(1)
+        
+        # Si agotó los intentos, mostrar mensaje orientativo
+        texto_estado.value = "ℹ️ Para registrar una restricción, primero importe soldados."
+        texto_estado.color = ft.Colors.GREY_400
+        page.update()
 
     async def cargar_tabla():
         """Carga la tabla de restricciones desde el backend."""
@@ -145,6 +155,8 @@ def build(page: ft.Page):
         tabla,
     ])
 
+    page.run_task(cargar_dropdown)
+    
     # --- Retorno para app.py ---
     return {
         "panel": panel,

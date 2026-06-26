@@ -1,5 +1,7 @@
 import flet as ft
 import httpx
+import tempfile
+import os
 from config import URL_BACKEND
 
 
@@ -17,7 +19,6 @@ def build(page: ft.Page):
 
     # --- Funciones asíncronas ---
     async def generar(e):
-        """Pide al backend que genere las guardias del mes."""
         mes = int(selector_mes.value)
         año = int(selector_año.value)
         try:
@@ -40,27 +41,23 @@ def build(page: ft.Page):
             page.update()
 
     async def cargar(e=None):
-        """Obtiene el calendario del backend y dibuja una tabla por área."""
         mes = int(selector_mes.value)
         año = int(selector_año.value)
         try:
             async with httpx.AsyncClient() as cliente:
                 resp = await cliente.get(f"{URL_BACKEND}/calendario-ver/{año}/{mes}")
                 datos = resp.json()
-                contenedor_puntos.controls.clear()
 
-                # Agrupar asignaciones por punto de guardia
+                contenedor_puntos.controls.clear()
                 asignaciones_por_punto = {}
                 for a in datos.get("asignaciones", []):
                     punto = a["punto"]
-                    if punto not in asignaciones_por_punto:
-                        asignaciones_por_punto[punto] = []
-                    asignaciones_por_punto[punto].append(a)
+                    asignaciones_por_punto.setdefault(punto, []).append(a)
 
-                # Crear una tabla por cada punto
                 for nombre_punto, lista in asignaciones_por_punto.items():
                     tabla_punto = ft.DataTable(
                         columns=[
+                            ft.DataColumn(ft.Text("ID")),
                             ft.DataColumn(ft.Text("Día")),
                             ft.DataColumn(ft.Text("Turno")),
                             ft.DataColumn(ft.Text("Cédula")),
@@ -72,9 +69,9 @@ def build(page: ft.Page):
                         rows=[],
                         border=ft.Border.all(1, ft.Colors.GREY_700),
                     )
-
                     for a in lista:
                         tabla_punto.rows.append(ft.DataRow(cells=[
+                            ft.DataCell(ft.Text(str(a["id_asignacion"]))),
                             ft.DataCell(ft.Text(str(a["dia"]))),
                             ft.DataCell(ft.Text(a["turno"].capitalize())),
                             ft.DataCell(ft.Text(a["cedula"])),
@@ -83,10 +80,7 @@ def build(page: ft.Page):
                             ft.DataCell(ft.Text(a["rango"])),
                             ft.DataCell(ft.Text(a["unidad"])),
                         ]))
-
-                    contenedor_puntos.controls.append(
-                        ft.Text(f"📌 {nombre_punto}", weight=ft.FontWeight.BOLD, size=16)
-                    )
+                    contenedor_puntos.controls.append(ft.Text(f"📌 {nombre_punto}", weight=ft.FontWeight.BOLD, size=16))
                     contenedor_puntos.controls.append(tabla_punto)
                     contenedor_puntos.controls.append(ft.Divider())
 
@@ -98,26 +92,40 @@ def build(page: ft.Page):
         finally:
             page.update()
 
+    async def descargar_pdf():
+        mes = int(selector_mes.value)
+        año = int(selector_año.value)
+        try:
+            async with httpx.AsyncClient() as cliente:
+                resp = await cliente.get(f"{URL_BACKEND}/exportar-pdf/{mes}/{año}")
+                if resp.status_code == 200:
+                    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+                    tmp.write(resp.content)
+                    tmp.close()
+                    os.startfile(tmp.name)
+                    texto_estado.value = "✅ PDF generado y abierto automáticamente."
+                    texto_estado.color = ft.Colors.GREEN
+                else:
+                    texto_estado.value = "❌ Error al generar el PDF. Verifique que existan guardias."
+                    texto_estado.color = ft.Colors.RED
+        except Exception as ex:
+            texto_estado.value = f"❌ Error: {ex}"
+            texto_estado.color = ft.Colors.RED
+        finally:
+            page.update()
+
     # --- Botones ---
-    boton_generar = ft.Button(
-        "⚙️ Generar Calendario",
-        on_click=generar,
-        icon=ft.Icons.CALENDAR_MONTH,
-    )
-    boton_ver = ft.Button(
-        "📅 Ver Calendario",
-        on_click=cargar,
-        icon=ft.Icons.CALENDAR_MONTH,
-    )
+    boton_generar = ft.Button("⚙️ Generar Calendario", on_click=generar, icon=ft.Icons.CALENDAR_MONTH)
+    boton_ver = ft.Button("📅 Ver Calendario", on_click=cargar, icon=ft.Icons.CALENDAR_MONTH)
+    boton_pdf = ft.Button("📄 Exportar PDF", on_click=lambda e: page.run_task(descargar_pdf), icon=ft.Icons.PICTURE_AS_PDF)
 
     # --- Panel visual ---
     panel = ft.Column([
-        ft.Row([selector_mes, selector_año, boton_generar, boton_ver]),
+        ft.Row([selector_mes, selector_año, boton_generar, boton_ver, boton_pdf]),
         ft.Divider(),
         contenedor_puntos,
     ])
 
-    # --- Retorno para app.py ---
     return {
         "panel": panel,
         "generar_calendario": generar,
