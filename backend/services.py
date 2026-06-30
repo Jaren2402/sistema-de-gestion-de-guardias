@@ -665,8 +665,8 @@ def generar_pdf(mes: int, año: int, session: Session) -> BytesIO:
         .where(
             Guardia.fecha_inicio >= inicio,
             Guardia.fecha_inicio < proximo_mes,
-            Asignacion.es_titular == True,
-            Asignacion.es_anulada == False,
+            Asignacion.es_titular,
+            not Asignacion.es_anulada,
         )
         .order_by(PuntoGuardia.nombre, Guardia.fecha_inicio, Guardia.tipo)
     )
