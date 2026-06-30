@@ -113,15 +113,41 @@ def build(page: ft.Page):
             texto_estado.color = ft.Colors.RED
         finally:
             page.update()
+            
+    async def difundir():
+        print("🔥 Botón Difundir presionado")
+        mes = int(selector_mes.value)
+        año = int(selector_año.value)
+        try:
+            async with httpx.AsyncClient() as cliente:
+                resp = await cliente.post(f"{URL_BACKEND}/difundir/{mes}/{año}")
+                datos = resp.json()
+                if "error" in datos:
+                    texto_estado.value = f"❌ {datos['error']}"
+                    texto_estado.color = ft.Colors.RED
+                    page.update()  
+                else:
+                    texto_estado.value = f"✅ {datos['mensaje']}"
+                    texto_estado.color = ft.Colors.GREEN
+                    page.update()  
+        except Exception as ex:
+            texto_estado.value = f"❌ Error: {ex}"
+            texto_estado.color = ft.Colors.RED
+            page.update()  
 
     # --- Botones ---
     boton_generar = ft.Button("⚙️ Generar Calendario", on_click=generar, icon=ft.Icons.CALENDAR_MONTH)
     boton_ver = ft.Button("📅 Ver Calendario", on_click=cargar, icon=ft.Icons.CALENDAR_MONTH)
     boton_pdf = ft.Button("📄 Exportar PDF", on_click=lambda e: page.run_task(descargar_pdf), icon=ft.Icons.PICTURE_AS_PDF)
+    boton_difundir = ft.Button(
+        "📢 Difundir",
+        on_click=lambda e: page.run_task(difundir),
+        icon=ft.Icons.SEND,
+    )
 
     # --- Panel visual ---
     panel = ft.Column([
-        ft.Row([selector_mes, selector_año, boton_generar, boton_ver, boton_pdf]),
+        ft.Row([selector_mes, selector_año, boton_generar, boton_ver, boton_pdf, boton_difundir]),
         ft.Divider(),
         contenedor_puntos,
     ])
