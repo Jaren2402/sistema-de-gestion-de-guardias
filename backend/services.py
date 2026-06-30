@@ -4,6 +4,8 @@ from sqlmodel import Session, select, delete
 from models import Soldado, Guardia, Asignacion, Restriccion, PuntoGuardia, Novedad
 from sqlalchemy.exc import IntegrityError
 import random
+import os
+import httpx
 
 # Imports para el PDF
 from io import BytesIO
@@ -757,7 +759,7 @@ def generar_pdf(mes: int, año: int, session: Session) -> BytesIO:
             ]))
             elements.append(table)
 
-            # --- Firma del comandante (ahora dentro del bucle, aparece en cada página) ---
+            # --- Firma del comandante (aparece en cada página) ---
             elements.append(Spacer(1, 55))
             elements.append(Paragraph("___________________________", firma_style))
             elements.append(Spacer(1, 4))
@@ -1043,3 +1045,34 @@ def obtener_historial_sustituciones(mes: int, año: int, session: Session) -> li
             })
 
     return historial
+
+async def difundir_pdf(mes: int, año: int, session: Session) -> dict:
+    """Genera el PDF del mes y lo envía directamente a Telegram desde memoria."""
+    # 1. Generar el PDF en memoria
+    pdf_buffer = generar_pdf(mes, año, session)
+    pdf_bytes = pdf_buffer.getvalue()
+    print(f"✅ PDF generado en memoria: {len(pdf_bytes)} bytes")
+
+    # 2. Obtener credenciales
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+    if not token or not chat_id:
+        return {"error": "No se ha configurado el token o el chat_id de Telegram."}
+
+    # 3. Enviar directamente los bytes sin guardar en disco
+    url = f"https://api.telegram.org/bot{token}/sendDocument"
+    filename = f"Plan_de_Guardias_{mes}_{año}.pdf"
+    
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as cliente:
+            files = {"document": (filename, pdf_bytes, "application/pdf")}
+            data = {"chat_id": chat_id, "caption": f"📅 Plan de Guardias {mes}/{año}"}
+            resp = await cliente.post(url, files=files, data=data)
+            resultado = resp.json()
+            if resultado.get("ok"):
+                return {"mensaje": "PDF enviado correctamente por Telegram."}
+            else:
+                return {"error": f"Error de Telegram: {resultado.get('description', 'Desconocido')}"}
+    except Exception as ex:
+        print(f"[ERROR] [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]: {ex}")
+        return {"error": f"No se pudo conectar con Telegram: {ex}"}

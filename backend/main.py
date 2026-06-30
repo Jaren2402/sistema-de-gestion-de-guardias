@@ -6,11 +6,14 @@ from sqlmodel import Session, select
 import pandas as pd
 import traceback
 import io
-from services import generar_calendario, obtener_calendario, buscar_candidatos_sustitucion, confirmar_sustitucion, confirmar_trueque, obtener_ficha_soldado, crear_soldado, actualizar_soldado, eliminar_soldado, crear_punto, editar_punto, eliminar_punto, listar_puntos, generar_pdf, crear_novedad, listar_novedades, obtener_estadisticas, obtener_historial_sustituciones
+from services import generar_calendario, obtener_calendario, buscar_candidatos_sustitucion, confirmar_sustitucion, confirmar_trueque, obtener_ficha_soldado, crear_soldado, actualizar_soldado, eliminar_soldado, crear_punto, editar_punto, eliminar_punto, listar_puntos, generar_pdf, crear_novedad, listar_novedades, obtener_estadisticas, obtener_historial_sustituciones, difundir_pdf
 
 from datetime import date, datetime
 from models import Soldado, Restriccion
 from database import crear_tablas, get_session
+
+from dotenv import load_dotenv
+load_dotenv()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -307,3 +310,11 @@ def historial_sustituciones_endpoint(
     session: Session = Depends(get_session)
 ):
     return obtener_historial_sustituciones(mes, ano, session)
+
+@app.post("/difundir/{mes}/{ano}")
+async def difundir_endpoint(
+    mes: int,
+    ano: int,
+    session: Session = Depends(get_session)
+):
+    return await difundir_pdf(mes, ano, session)
