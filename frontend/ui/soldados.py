@@ -7,14 +7,21 @@ def build(page: ft.Page, on_soldados_actualizados=None):
     # --- Controles de la interfaz ---
     tabla = ft.DataTable(
         columns=[
-            ft.DataColumn(ft.Text("Cédula")),
-            ft.DataColumn(ft.Text("Nombre")),
-            ft.DataColumn(ft.Text("Apellido")),
-            ft.DataColumn(ft.Text("Rango")),
-            ft.DataColumn(ft.Text("Unidad")),
+            ft.DataColumn(ft.Text("CÉDULA")),
+            ft.DataColumn(ft.Text("NOMBRE")),
+            ft.DataColumn(ft.Text("APELLIDO")),
+            ft.DataColumn(ft.Text("RANGO")),
+            ft.DataColumn(ft.Text("UNIDAD")),
         ],
         rows=[],
-        border=ft.Border.all(1, ft.Colors.GREY_700),
+        border=ft.Border.all(1, ft.Colors.GREY_800),
+        border_radius=10,
+        bgcolor="#121416",
+        heading_row_color="#25292E",
+        heading_row_height=48,
+        data_row_min_height=36,
+        data_text_style=ft.TextStyle(size=16, color="#DEDEDE"),
+        column_spacing=40,
     )
     barra_progreso = ft.ProgressBar(visible=False)
     texto_estado = ft.Text()
@@ -29,13 +36,16 @@ def build(page: ft.Page, on_soldados_actualizados=None):
                 datos = respuesta.json()
                 tabla.rows.clear()
                 for s in datos:
-                    tabla.rows.append(ft.DataRow(cells=[
-                        ft.DataCell(ft.Text(s["cedula"])),
-                        ft.DataCell(ft.Text(s["nombre"])),
-                        ft.DataCell(ft.Text(s["apellido"])),
-                        ft.DataCell(ft.Text(s["rango"])),
-                        ft.DataCell(ft.Text(s["unidad"])),
-                    ]))
+                    tabla.rows.append(ft.DataRow(
+                        color="#171C22",
+                        cells=[
+                            ft.DataCell(ft.Text(s["cedula"])),
+                            ft.DataCell(ft.Text(s["nombre"])),
+                            ft.DataCell(ft.Text(s["apellido"])),
+                            ft.DataCell(ft.Text(s["rango"])),
+                            ft.DataCell(ft.Text(s["unidad"])),
+                        ]
+                    ))
                 texto_estado.value = f"Mostrando {len(datos)} soldados."
                 texto_estado.color = ft.Colors.GREEN
         except Exception as ex:

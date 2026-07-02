@@ -11,12 +11,19 @@ def build(page: ft.Page):
 
     tabla_puntos = ft.DataTable(
         columns=[
-            ft.DataColumn(ft.Text("Nombre")),
-            ft.DataColumn(ft.Text("Descripción")),
-            ft.DataColumn(ft.Text("Acciones")),
+            ft.DataColumn(ft.Text("NOMBRE")),
+            ft.DataColumn(ft.Text("DESCRIPCIÓN")),
+            ft.DataColumn(ft.Text("ACCIONES")),
         ],
         rows=[],
-        border=ft.Border.all(1, ft.Colors.GREY_700),
+        border=ft.Border.all(1, ft.Colors.GREY_800),
+        border_radius=10,
+        bgcolor="#121416",
+        heading_row_color="#25292E",
+        heading_row_height=48,
+        data_row_min_height=36,
+        data_text_style=ft.TextStyle(size=16, color="#DEDEDE"),
+        column_spacing=30,
     )
 
     async def cargar_tabla():
@@ -26,7 +33,8 @@ def build(page: ft.Page):
                 datos = resp.json()
                 tabla_puntos.rows.clear()
                 for p in datos:
-                    tabla_puntos.rows.append(ft.DataRow(cells=[
+                    tabla_puntos.rows.append(ft.DataRow(color="#171C22", cells=[
+                        
                         ft.DataCell(ft.Text(p["nombre"])),
                         ft.DataCell(ft.Text(p.get("descripcion", ""))),
                         ft.DataCell(ft.Row([

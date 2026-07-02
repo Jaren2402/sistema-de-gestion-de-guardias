@@ -16,14 +16,21 @@ def build(page: ft.Page):
     campo_motivo = ft.TextField(label="Motivo")
     tabla = ft.DataTable(
         columns=[
-            ft.DataColumn(ft.Text("Soldado")),
-            ft.DataColumn(ft.Text("Inicio")),
-            ft.DataColumn(ft.Text("Fin")),
-            ft.DataColumn(ft.Text("Motivo")),
-            ft.DataColumn(ft.Text("Eliminar")),
+            ft.DataColumn(ft.Text("SOLDADO")),
+            ft.DataColumn(ft.Text("INICIO")),
+            ft.DataColumn(ft.Text("FIN")),
+            ft.DataColumn(ft.Text("MOTIVO")),
+            ft.DataColumn(ft.Text("ACCIONES")),
         ],
         rows=[],
-        border=ft.Border.all(1, ft.Colors.GREY_700),
+        border=ft.Border.all(1, ft.Colors.GREY_800),
+        border_radius=10,
+        bgcolor="#121416",
+        heading_row_color="#25292E",
+        heading_row_height=48,
+        data_row_min_height=36,
+        data_text_style=ft.TextStyle(size=16, color="#DEDEDE"),
+        column_spacing=40,
     )
 
     # --- Funciones asíncronas ---
@@ -66,17 +73,20 @@ def build(page: ft.Page):
                 datos = resp.json()
                 tabla.rows.clear()
                 for r in datos:
-                    tabla.rows.append(ft.DataRow(cells=[
-                        ft.DataCell(ft.Text(r["nombre"])),
-                        ft.DataCell(ft.Text(r["fecha_inicio"])),
-                        ft.DataCell(ft.Text(r["fecha_fin"])),
-                        ft.DataCell(ft.Text(r["motivo"])),
-                        ft.DataCell(ft.TextButton(
-                            "Eliminar",
-                            icon=ft.Icons.DELETE,
-                            on_click=lambda e, rid=r["id"]: page.run_task(eliminar, rid)
-                        )),
-                    ]))
+                    tabla.rows.append(ft.DataRow(
+                        color="#171C22",
+                        cells=[
+                            ft.DataCell(ft.Text(r["nombre"])),
+                            ft.DataCell(ft.Text(r["fecha_inicio"])),
+                            ft.DataCell(ft.Text(r["fecha_fin"])),
+                            ft.DataCell(ft.Text(r["motivo"])),
+                            ft.DataCell(ft.TextButton(
+                                "Eliminar",
+                                icon=ft.Icons.DELETE,
+                                on_click=lambda e, rid=r["id"]: page.run_task(eliminar, rid)
+                            )),
+                        ]
+                    ))
         except Exception as ex:
             texto_estado.value = f"Error al cargar restricciones: {ex}"
             texto_estado.color = ft.Colors.RED

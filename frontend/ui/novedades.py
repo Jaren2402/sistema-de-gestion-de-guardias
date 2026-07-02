@@ -15,15 +15,22 @@ def build(page: ft.Page):
 
     tabla_guardias = ft.DataTable(
         columns=[
-            ft.DataColumn(ft.Text("Día")),
-            ft.DataColumn(ft.Text("Turno")),
-            ft.DataColumn(ft.Text("Punto")),
-            ft.DataColumn(ft.Text("Soldado")),
-            ft.DataColumn(ft.Text("Novedad")),
-            ft.DataColumn(ft.Text("Acción")),
+            ft.DataColumn(ft.Text("DÍA")),
+            ft.DataColumn(ft.Text("TURNO")),
+            ft.DataColumn(ft.Text("PUNTO")),
+            ft.DataColumn(ft.Text("SOLDADO")),
+            ft.DataColumn(ft.Text("NOVEDAD")),
+            ft.DataColumn(ft.Text("ACCIÓN")),
         ],
         rows=[],
-        border=ft.Border.all(1, ft.Colors.GREY_700),
+        border=ft.Border.all(1, ft.Colors.GREY_800),
+        border_radius=10,
+        bgcolor="#121416",
+        heading_row_color="#25292E",
+        heading_row_height=48,
+        data_row_min_height=36,
+        data_text_style=ft.TextStyle(size=16, color="#DEDEDE"),
+        column_spacing=30,
     )
 
     async def cargar_guardias(e=None):
@@ -60,14 +67,17 @@ def build(page: ft.Page):
                         on_click=abrir_dialogo_novedad,
                     )
 
-                    tabla_guardias.rows.append(ft.DataRow(cells=[
-                        ft.DataCell(ft.Text(str(a["dia"]))),
-                        ft.DataCell(ft.Text(a["turno"].capitalize())),
-                        ft.DataCell(ft.Text(a["punto"])),
-                        ft.DataCell(ft.Text(f"{a['nombre']} {a['apellido']} ({a['cedula']})")),
-                        ft.DataCell(txt_novedad),
-                        ft.DataCell(btn_accion),
-                    ]))
+                    tabla_guardias.rows.append(ft.DataRow(
+                        color="#171C22",
+                        cells=[
+                            ft.DataCell(ft.Text(str(a["dia"]))),
+                            ft.DataCell(ft.Text(a["turno"].capitalize())),
+                            ft.DataCell(ft.Text(a["punto"])),
+                            ft.DataCell(ft.Text(f"{a['nombre']} {a['apellido']} ({a['cedula']})")),
+                            ft.DataCell(txt_novedad),
+                            ft.DataCell(btn_accion),
+                        ]
+                    ))
                 texto_estado.value = f"Se encontraron {len(asignaciones)} guardias."
                 texto_estado.color = ft.Colors.GREEN
         except Exception as ex:

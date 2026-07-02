@@ -13,3 +13,10 @@ venv/
 # Caché de Python
 __pycache__/
 *.pyc
+
+dist/
+build/
+*.spec
+*.db-shm
+*.db-wal
+*.pdf

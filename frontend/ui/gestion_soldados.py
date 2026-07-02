@@ -23,15 +23,22 @@ def build(page: ft.Page):
 
     tabla_soldados = ft.DataTable(
         columns=[
-            ft.DataColumn(ft.Text("Cédula")),
-            ft.DataColumn(ft.Text("Nombre")),
-            ft.DataColumn(ft.Text("Apellido")),
-            ft.DataColumn(ft.Text("Rango")),
-            ft.DataColumn(ft.Text("Unidad")),
-            ft.DataColumn(ft.Text("Acciones")),
+            ft.DataColumn(ft.Text("CÉDULA")),
+            ft.DataColumn(ft.Text("NOMBRE")),
+            ft.DataColumn(ft.Text("APELLIDO")),
+            ft.DataColumn(ft.Text("RANGO")),
+            ft.DataColumn(ft.Text("UNIDAD")),
+            ft.DataColumn(ft.Text("ACCIONES")),
         ],
         rows=[],
-        border=ft.Border.all(1, ft.Colors.GREY_700),
+        border=ft.Border.all(1, ft.Colors.GREY_800),
+        border_radius=10,
+        bgcolor="#121416",
+        heading_row_color="#25292E",
+        heading_row_height=48,
+        data_row_min_height=36,
+        data_text_style=ft.TextStyle(size=16, color="#DEDEDE"),
+        column_spacing=30,
     )
 
     # --- Funciones asíncronas ---
@@ -43,19 +50,22 @@ def build(page: ft.Page):
                 datos = resp.json()
                 tabla_soldados.rows.clear()
                 for s in datos:
-                    tabla_soldados.rows.append(ft.DataRow(cells=[
-                        ft.DataCell(ft.Text(s["cedula"])),
-                        ft.DataCell(ft.Text(s["nombre"])),
-                        ft.DataCell(ft.Text(s["apellido"])),
-                        ft.DataCell(ft.Text(s["rango"])),
-                        ft.DataCell(ft.Text(s["unidad"])),
-                        ft.DataCell(ft.Row([
-                            ft.IconButton(icon=ft.Icons.EDIT, tooltip="Editar",
-                                          data=s, on_click=seleccionar_para_editar),
-                            ft.IconButton(icon=ft.Icons.DELETE, tooltip="Eliminar",
-                                          data=s["id_soldado"], on_click=eliminar_soldado),
-                        ])),
-                    ]))
+                    tabla_soldados.rows.append(ft.DataRow(
+                        color="#171C22",
+                        cells=[
+                            ft.DataCell(ft.Text(s["cedula"])),
+                            ft.DataCell(ft.Text(s["nombre"])),
+                            ft.DataCell(ft.Text(s["apellido"])),
+                            ft.DataCell(ft.Text(s["rango"])),
+                            ft.DataCell(ft.Text(s["unidad"])),
+                            ft.DataCell(ft.Row([
+                                ft.IconButton(icon=ft.Icons.EDIT, tooltip="Editar",
+                                              data=s, on_click=seleccionar_para_editar),
+                                ft.IconButton(icon=ft.Icons.DELETE, tooltip="Eliminar",
+                                              data=s["id_soldado"], on_click=eliminar_soldado),
+                            ])),
+                        ]
+                    ))
                 texto_estado.value = ""
         except Exception as ex:
             texto_estado.value = f"Error al cargar: {ex}"

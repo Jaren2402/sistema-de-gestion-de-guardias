@@ -12,7 +12,9 @@ from ui.historial import build as build_historial
 
 async def main(page: ft.Page):
     page.title = "Sistema de Guardias Militares"
-    page.theme_mode = ft.ThemeMode.DARK
+    # page.theme_mode = ft.ThemeMode.DARK
+    page.bgcolor = "#12161A"
+    page.theme_mode = ft.Theme(font_family="Tahoma")
     page.padding = 20
     page.scroll = ft.ScrollMode.AUTO
 

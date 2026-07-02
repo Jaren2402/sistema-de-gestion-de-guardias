@@ -16,14 +16,21 @@ def build(page: ft.Page):
     selector_año = ft.TextField(label="Año", value="2026", width=100)
     tabla_ficha = ft.DataTable(
         columns=[
-            ft.DataColumn(ft.Text("Día")),
-            ft.DataColumn(ft.Text("Turno")),
-            ft.DataColumn(ft.Text("Punto")),
-            ft.DataColumn(ft.Text("Titular/Suplente")),
-            ft.DataColumn(ft.Text("Factor")),
+            ft.DataColumn(ft.Text("DÍA")),
+            ft.DataColumn(ft.Text("TURNO")),
+            ft.DataColumn(ft.Text("PUNTO")),
+            ft.DataColumn(ft.Text("TITULAR/SUPLENTE")),
+            ft.DataColumn(ft.Text("FACTOR")),
         ],
         rows=[],
-        border=ft.Border.all(1, ft.Colors.GREY_700),
+        border=ft.Border.all(1, ft.Colors.GREY_800),
+        border_radius=10,
+        bgcolor="#121416",
+        heading_row_color="#25292E",
+        heading_row_height=48,
+        data_row_min_height=36,
+        data_text_style=ft.TextStyle(size=16, color="#DEDEDE"),
+        column_spacing=40,
     )
     resumen_texto = ft.Text(size=16, weight=ft.FontWeight.BOLD)
 
@@ -81,13 +88,16 @@ def build(page: ft.Page):
                 tabla_ficha.rows.clear()
                 for g in datos.get("guardias", []):
                     titular = "Titular" if g["es_titular"] else "Suplente"
-                    tabla_ficha.rows.append(ft.DataRow(cells=[
-                        ft.DataCell(ft.Text(str(g["dia"]))),
-                        ft.DataCell(ft.Text(g["turno"].capitalize())),
-                        ft.DataCell(ft.Text(g["punto"])),
-                        ft.DataCell(ft.Text(titular)),
-                        ft.DataCell(ft.Text(str(g["factor"]))),
-                    ]))
+                    tabla_ficha.rows.append(ft.DataRow(
+                        color="#171C22",
+                        cells=[
+                            ft.DataCell(ft.Text(str(g["dia"]))),
+                            ft.DataCell(ft.Text(g["turno"].capitalize())),
+                            ft.DataCell(ft.Text(g["punto"])),
+                            ft.DataCell(ft.Text(titular)),
+                            ft.DataCell(ft.Text(str(g["factor"]))),
+                        ]
+                    ))
 
                 resumen_texto.value = f"{datos['nombre']} - Total guardias: {datos['total_guardias']} | Puntos acumulados: {datos['total_puntos']}"
                 texto_estado.value = ""

@@ -2,7 +2,7 @@ import flet as ft
 import httpx
 import tempfile
 import os
-from config import URL_BACKEND
+from config import URL_BACKEND, estilo_tabla
 
 
 def build(page: ft.Page):
@@ -58,28 +58,45 @@ def build(page: ft.Page):
                     tabla_punto = ft.DataTable(
                         columns=[
                             ft.DataColumn(ft.Text("ID")),
-                            ft.DataColumn(ft.Text("Día")),
-                            ft.DataColumn(ft.Text("Turno")),
-                            ft.DataColumn(ft.Text("Cédula")),
-                            ft.DataColumn(ft.Text("Nombre")),
-                            ft.DataColumn(ft.Text("Apellido")),
-                            ft.DataColumn(ft.Text("Rango")),
-                            ft.DataColumn(ft.Text("Unidad")),
+                            ft.DataColumn(ft.Text("DÍA")),
+                            ft.DataColumn(ft.Text("TURNO")),
+                            ft.DataColumn(ft.Text("CÉDULA")),
+                            ft.DataColumn(ft.Text("NOMBRE")),
+                            ft.DataColumn(ft.Text("APELLIDO")),
+                            ft.DataColumn(ft.Text("RANGO")),
+                            ft.DataColumn(ft.Text("UNIDAD")),
                         ],
                         rows=[],
-                        border=ft.Border.all(1, ft.Colors.GREY_700),
+                        border=ft.Border.all(1, ft.Colors.GREY_800),
+                        border_radius=10,
+                        bgcolor="#121416",
+                        heading_row_color="#25292E",
+                        heading_row_height=48,
+                        data_row_min_height=36,
+                        data_text_style=ft.TextStyle(size=16, color="#DEDEDE"),
+                        column_spacing=40,
                     )
-                    for a in lista:
-                        tabla_punto.rows.append(ft.DataRow(cells=[
-                            ft.DataCell(ft.Text(str(a["id_asignacion"]))),
-                            ft.DataCell(ft.Text(str(a["dia"]))),
-                            ft.DataCell(ft.Text(a["turno"].capitalize())),
-                            ft.DataCell(ft.Text(a["cedula"])),
-                            ft.DataCell(ft.Text(a["nombre"])),
-                            ft.DataCell(ft.Text(a["apellido"])),
-                            ft.DataCell(ft.Text(a["rango"])),
-                            ft.DataCell(ft.Text(a["unidad"])),
-                        ]))
+                    for index, a in enumerate(lista):
+                        # Color alterno para efecto cebra (con suficiente contraste)
+                        if index % 2 == 0:
+                            color_fila = "#171C22"    # Fila oscura
+                        else:
+                            color_fila = "#171C22"  # Fila clara
+
+                        fila = ft.DataRow(
+                            color=color_fila,
+                            cells=[
+                                ft.DataCell(ft.Text(str(a["id_asignacion"]))),
+                                ft.DataCell(ft.Text(str(a["dia"]))),
+                                ft.DataCell(ft.Text(a["turno"].capitalize())),
+                                ft.DataCell(ft.Text(a["cedula"])),
+                                ft.DataCell(ft.Text(a["nombre"].capitalize())),
+                                ft.DataCell(ft.Text(a["apellido"])),
+                                ft.DataCell(ft.Text(a["rango"].title())),
+                                ft.DataCell(ft.Text(a["unidad"].capitalize())),
+                            ]
+                        )
+                        tabla_punto.rows.append(fila)
                     contenedor_puntos.controls.append(ft.Text(f"📌 {nombre_punto}", weight=ft.FontWeight.BOLD, size=16))
                     contenedor_puntos.controls.append(tabla_punto)
                     contenedor_puntos.controls.append(ft.Divider())
