@@ -1,10 +1,11 @@
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "backend")))
 
-from sqlmodel import SQLModel, Session, create_engine, text
-from backend.services import generar_calendario, confirmar_sustitucion
+from sqlmodel import Session, SQLModel, create_engine, text
+
+from backend.services import confirmar_sustitucion, generar_calendario
 
 
 def test_generar_calendario_sin_soldados():
@@ -35,7 +36,7 @@ def test_generar_calendario_sin_puntos():
 
     assert "error" in resultado
     assert resultado["error"] == "No hay puntos de guardia definidos."
-    
+
 def test_flujo_completo_sustitucion_simple():
     """Prueba integrada: anula la asignación original y crea la del sustituto."""
     engine = create_engine("sqlite:///:memory:")
@@ -81,7 +82,7 @@ def test_flujo_completo_sustitucion_simple():
         assert nueva is not None
         assert nueva[0] == 2   # ID del sustituto
         assert nueva[1] == 1   # es_titular=True
-        
+
 def test_buscar_candidatos_sustitucion_ideal():
     """El candidato sin guardias previas aparece como ideal."""
     engine = create_engine("sqlite:///:memory:")
@@ -117,7 +118,7 @@ def test_buscar_candidatos_sustitucion_ideal():
         # El primer candidato debe ser el soldado 2 (sin fatiga)
         assert candidatos[0]["id_soldado"] == 2
         assert "Ideal" in candidatos[0]["estado"]
-        
+
 def test_confirmar_trueque():
     """El trueque debe intercambiar soldados entre dos asignaciones y crear novedad de auditoría."""
     engine = create_engine("sqlite:///:memory:")

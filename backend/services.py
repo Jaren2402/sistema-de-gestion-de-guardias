@@ -1,19 +1,20 @@
-from datetime import datetime, timedelta
-from typing import Tuple
-from sqlmodel import Session, select, delete
-from models import Soldado, Guardia, Asignacion, Restriccion, PuntoGuardia, Novedad
-from sqlalchemy.exc import IntegrityError
-import random
 import os
-import httpx
+import random
+from collections import defaultdict
+from datetime import datetime, timedelta
 
 # Imports para el PDF
 from io import BytesIO
-from reportlab.lib.pagesizes import A4
+from typing import Tuple
+
+import httpx
+from models import Asignacion, Guardia, Novedad, PuntoGuardia, Restriccion, Soldado
 from reportlab.lib import colors
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
-from collections import defaultdict
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from sqlalchemy.exc import IntegrityError
+from sqlmodel import Session, delete, select
 
 # Mapa de prioridad por rango (menor número = menor jerarquía, hará más guardias)
 PRIORIDAD_RANGO = {
@@ -25,7 +26,7 @@ PRIORIDAD_RANGO = {
     "teniente": 6,
     "primer teniente": 7,
     "capitán": 8,
-} 
+}
 
 # Factores de ponderación para guardias
 FACTOR_TURNO = {
@@ -34,372 +35,394 @@ FACTOR_TURNO = {
 }
 FACTOR_FIN_SEMANA = 1.5  # Multiplicador adicional para sábado y domingo
 
+
+def _log_error(contexto: str, ex: Exception):
+    """Registra un error en consola con formato estandarizado [ERROR] [fecha]."""
+    import traceback
+    print(f"[ERROR] [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]: [{contexto}] {ex}")
+    traceback.print_exc()
+
+
+def _calcular_puntos_mes(mes: int, año: int, session: Session) -> dict:
+    """Calcula puntos acumulados por soldado en un mes completo.
+    Solo considera asignaciones titulares no anuladas.
+    Devuelve {id_soldado: puntos_totales}."""
+    if mes < 1 or mes > 12:
+        return {}
+    inicio = datetime(año, mes, 1)
+    proximo_mes = datetime(año + 1, 1, 1) if mes == 12 else datetime(año, mes + 1, 1)
+
+    query = (
+        select(Soldado, Asignacion, Guardia)
+        .join(Asignacion, Soldado.id_soldado == Asignacion.id_soldado)
+        .join(Guardia, Asignacion.id_guardia == Guardia.id_guardia)
+        .where(
+            Guardia.fecha_inicio >= inicio,
+            Guardia.fecha_inicio < proximo_mes,
+            Asignacion.es_titular,
+            ~Asignacion.es_anulada
+        )
+    )
+    resultados = session.exec(query).all()
+
+    puntos = {}
+    for soldado, asignacion, guardia in resultados:
+        sid = soldado.id_soldado
+        if sid not in puntos:
+            puntos[sid] = 0.0
+        factor = FACTOR_TURNO.get(guardia.tipo, 1.0)
+        if guardia.fecha_inicio.weekday() in (5, 6):
+            factor *= FACTOR_FIN_SEMANA
+        puntos[sid] += factor
+    return puntos
+
+
 def generar_calendario(mes: int, año: int, session: Session) -> dict:
     """
     Genera el calendario de guardias para un mes completo.
     Limpia el mes anterior, crea turnos para cada punto de guardia,
     respetando 48 horas de descanso, restricciones y asignando con equidad.
     """
-    soldados = session.exec(select(Soldado)).all()
-    if not soldados:
-        return {"error": "No hay soldados registrados."}
+    try:
+        soldados = session.exec(select(Soldado)).all()
+        if not soldados:
+            return {"error": "No hay soldados registrados."}
 
-    # Obtener todos los puntos de guardia definidos por la unidad
-    puntos = session.exec(select(PuntoGuardia)).all()
-    if not puntos:
-        return {"error": "No hay puntos de guardia definidos."}
+        puntos = session.exec(select(PuntoGuardia)).all()
+        if not puntos:
+            return {"error": "No hay puntos de guardia definidos."}
 
-    # Calcular el rango de fechas del mes
-    inicio = datetime(año, mes, 1)
-    if mes == 12:
-        proximo_mes = datetime(año + 1, 1, 1)
-    else:
-        proximo_mes = datetime(año, mes + 1, 1)
+        inicio = datetime(año, mes, 1)
+        if mes == 12:
+            proximo_mes = datetime(año + 1, 1, 1)
+        else:
+            proximo_mes = datetime(año, mes + 1, 1)
 
-    # --- LIMPIEZA PREVIA: eliminar el calendario anterior del mes ---
-    ids_guardias = select(Guardia.id_guardia).where(
-        Guardia.fecha_inicio >= inicio,
-        Guardia.fecha_inicio < proximo_mes
-    )
-    session.exec(
-        delete(Asignacion).where(Asignacion.id_guardia.in_(ids_guardias))
-    )
-    session.exec(
-        delete(Guardia).where(
+        ids_guardias = select(Guardia.id_guardia).where(
             Guardia.fecha_inicio >= inicio,
             Guardia.fecha_inicio < proximo_mes
         )
-    )
-    session.commit()
-    # ---------------------------------------------------------------
-
-    # --- ARRASTRE MULTI-MES: cargar fatiga del mes anterior ---
-    # Determinar el inicio del mes anterior
-    if mes == 1:
-        mes_anterior = 12
-        año_anterior = año - 1
-    else:
-        mes_anterior = mes - 1
-        año_anterior = año
-
-    if mes_anterior == 12:
-        fin_mes_anterior = datetime(año_anterior + 1, 1, 1) - timedelta(days=1)
-    else:
-        fin_mes_anterior = datetime(año_anterior, mes_anterior + 1, 1) - timedelta(days=1)
-
-    # Consultar las últimas guardias del mes anterior (últimos 3 días)
-    fecha_consulta = fin_mes_anterior - timedelta(days=3)
-    asignaciones_anteriores = session.exec(
-        select(Asignacion)
-        .join(Guardia)
-        .where(
-            Asignacion.es_titular,
-            Guardia.fecha_inicio >= fecha_consulta,
-            Guardia.fecha_inicio <= fin_mes_anterior
+        session.exec(delete(Asignacion).where(Asignacion.id_guardia.in_(ids_guardias)))
+        session.exec(
+            delete(Guardia).where(
+                Guardia.fecha_inicio >= inicio,
+                Guardia.fecha_inicio < proximo_mes
+            )
         )
-    ).all()
+        session.commit()
 
-    # Diccionario con la última hora en que cada soldado terminó una guardia
-    ultima_fecha_previa = {}
-    for a in asignaciones_anteriores:
-        g = session.get(Guardia, a.id_guardia)
-        if g:
-            if a.id_soldado not in ultima_fecha_previa or g.fecha_fin > ultima_fecha_previa[a.id_soldado]:
-                ultima_fecha_previa[a.id_soldado] = g.fecha_fin
-    # ---------------------------------------------------------------
+        decay = 0.5
+        if mes == 1:
+            mes_puntos = 12
+            año_puntos = año - 1
+        else:
+            mes_puntos = mes - 1
+            año_puntos = año
+        puntos_arrastre = _calcular_puntos_mes(mes_puntos, año_puntos, session)
 
-    # Obtener todas las restricciones que se solapan con este mes
-    restricciones = session.exec(
-        select(Restriccion).where(
-            Restriccion.fecha_inicio <= (proximo_mes - timedelta(days=1)).date(),
-            Restriccion.fecha_fin >= inicio.date()
-        )
-    ).all()
+        if mes == 1:
+            mes_anterior = 12
+            año_anterior = año - 1
+        else:
+            mes_anterior = mes - 1
+            año_anterior = año
 
-    # Seguimiento de la carga y el último día trabajado por cada soldado
-    historial = {s.id_soldado: 0.0 for s in soldados}  # float por ponderación
+        if mes_anterior == 12:
+            fin_mes_anterior = datetime(año_anterior + 1, 1, 1) - timedelta(days=1)
+        else:
+            fin_mes_anterior = datetime(año_anterior, mes_anterior + 1, 1) - timedelta(days=1)
 
-    # Inicializar la fatiga con los datos del mes anterior (arrastre)
-    ultima_fecha = {}
-    for s in soldados:
-        ultima_fecha[s.id_soldado] = ultima_fecha_previa.get(s.id_soldado, None)
+        fecha_consulta = fin_mes_anterior - timedelta(days=3)
+        asignaciones_anteriores = session.exec(
+            select(Asignacion)
+            .join(Guardia)
+            .where(
+                Asignacion.es_titular,
+                Guardia.fecha_inicio >= fecha_consulta,
+                Guardia.fecha_inicio <= fin_mes_anterior
+            )
+        ).all()
 
-    asignaciones_creadas = []
+        ultima_fecha_previa = {}
+        for a in asignaciones_anteriores:
+            g = session.get(Guardia, a.id_guardia)
+            if g:
+                if a.id_soldado not in ultima_fecha_previa or g.fecha_fin > ultima_fecha_previa[a.id_soldado]:
+                    ultima_fecha_previa[a.id_soldado] = g.fecha_fin
 
-    # Procesar días en orden cronológico
-    dia_actual = inicio
-    while dia_actual < proximo_mes:
-        # Para cada día, procesamos los turnos en orden: primero nocturno (más pesado) luego diurno
-        for turno in ["nocturno", "diurno"]:
-            hora_inicio = 19 if turno == "nocturno" else 7
-            fecha_inicio_turno = dia_actual.replace(hour=hora_inicio)
-            fecha_fin_turno = fecha_inicio_turno + timedelta(hours=12)
+        restricciones = session.exec(
+            select(Restriccion).where(
+                Restriccion.fecha_inicio <= (proximo_mes - timedelta(days=1)).date(),
+                Restriccion.fecha_fin >= inicio.date()
+            )
+        ).all()
 
-            # Rotación de áreas: barajar puntos para evitar asignaciones fijas
-            puntos_barajados = list(puntos)
-            random.shuffle(puntos_barajados)
+        historial = {}
+        for s in soldados:
+            pts_arrastre = puntos_arrastre.get(s.id_soldado, 0.0)
+            historial[s.id_soldado] = pts_arrastre * decay
 
-            for punto in puntos_barajados:
-                nueva_guardia = Guardia(
-                    fecha_inicio=fecha_inicio_turno,
-                    fecha_fin=fecha_fin_turno,
-                    tipo=turno,
-                    id_punto=punto.id_punto
-                )
-                session.add(nueva_guardia)
-                session.flush()
+        ultima_fecha = {}
+        for s in soldados:
+            ultima_fecha[s.id_soldado] = ultima_fecha_previa.get(s.id_soldado, None)
 
-                # Filtrar candidatos
-                candidatos = []
-                for s in soldados:
-                    # Fatiga: 48 horas de descanso
-                    if ultima_fecha[s.id_soldado] is not None:
-                        if ultima_fecha[s.id_soldado] + timedelta(hours=48) > fecha_inicio_turno:
+        asignaciones_creadas = []
+
+        dia_actual = inicio
+        while dia_actual < proximo_mes:
+            for turno in ["nocturno", "diurno"]:
+                hora_inicio = 19 if turno == "nocturno" else 7
+                fecha_inicio_turno = dia_actual.replace(hour=hora_inicio)
+                fecha_fin_turno = fecha_inicio_turno + timedelta(hours=12)
+
+                puntos_barajados = list(puntos)
+                random.shuffle(puntos_barajados)
+
+                for punto in puntos_barajados:
+                    nueva_guardia = Guardia(
+                        fecha_inicio=fecha_inicio_turno,
+                        fecha_fin=fecha_fin_turno,
+                        tipo=turno,
+                        id_punto=punto.id_punto
+                    )
+                    session.add(nueva_guardia)
+                    session.flush()
+
+                    candidatos = []
+                    for s in soldados:
+                        if ultima_fecha[s.id_soldado] is not None:
+                            if ultima_fecha[s.id_soldado] + timedelta(hours=48) > fecha_inicio_turno:
+                                continue
+                        tiene_restriccion = False
+                        for r in restricciones:
+                            if r.id_soldado == s.id_soldado and r.fecha_inicio <= dia_actual.date() <= r.fecha_fin:
+                                tiene_restriccion = True
+                                break
+                        if tiene_restriccion:
                             continue
+                        candidatos.append(s)
 
-                    # Restricciones planificadas en este día
-                    tiene_restriccion = False
-                    for r in restricciones:
-                        if r.id_soldado == s.id_soldado and r.fecha_inicio <= dia_actual.date() <= r.fecha_fin:
-                            tiene_restriccion = True
-                            break
-                    if tiene_restriccion:
-                        continue
+                    if not candidatos:
+                        session.rollback()
+                        return {
+                            "error": f"No hay candidatos para el {dia_actual.date()} turno {turno}, punto {punto.nombre}."
+                        }
 
-                    candidatos.append(s)
+                    def clave_orden(s: Soldado) -> Tuple[int, int, str]:
+                        prioridad = PRIORIDAD_RANGO.get(s.rango, 99)
+                        return (historial[s.id_soldado], prioridad, s.cedula)
 
-                if not candidatos:
-                    session.rollback()
-                    return {
-                        "error": f"No hay candidatos para el {dia_actual.date()} turno {turno}, punto {punto.nombre}."
-                    }
+                    elegido = min(candidatos, key=clave_orden)
 
-                # Seleccionar al mejor candidato
-                def clave_orden(s: Soldado) -> Tuple[int, int, str]:
-                    prioridad = PRIORIDAD_RANGO.get(s.rango, 99)
-                    return (historial[s.id_soldado], prioridad, s.cedula)
+                    nueva_asignacion = Asignacion(
+                        id_soldado=elegido.id_soldado,
+                        id_guardia=nueva_guardia.id_guardia,
+                        es_titular=True
+                    )
+                    session.add(nueva_asignacion)
 
-                elegido = min(candidatos, key=clave_orden)
+                    factor = FACTOR_TURNO.get(turno, 1.0)
+                    if dia_actual.weekday() in (5, 6):
+                        factor *= FACTOR_FIN_SEMANA
+                    historial[elegido.id_soldado] += factor
+                    ultima_fecha[elegido.id_soldado] = fecha_inicio_turno
 
-                # Registrar asignación
-                nueva_asignacion = Asignacion(
-                    id_soldado=elegido.id_soldado,
-                    id_guardia=nueva_guardia.id_guardia,
-                    es_titular=True
-                )
-                session.add(nueva_asignacion)
+                    asignaciones_creadas.append({
+                        "fecha": dia_actual.strftime("%Y-%m-%d"),
+                        "turno": turno,
+                        "punto": punto.nombre,
+                        "cedula": elegido.cedula,
+                        "nombre": f"{elegido.nombre} {elegido.apellido}"
+                    })
 
-                # Calcular factor ponderado y actualizar historial
-                factor = FACTOR_TURNO.get(turno, 1.0)
-                if dia_actual.weekday() in (5, 6):  # fin de semana
-                    factor *= FACTOR_FIN_SEMANA
-                historial[elegido.id_soldado] += factor
-                ultima_fecha[elegido.id_soldado] = fecha_inicio_turno
+            dia_actual += timedelta(days=1)
 
-                asignaciones_creadas.append({
-                    "fecha": dia_actual.strftime("%Y-%m-%d"),
-                    "turno": turno,
-                    "punto": punto.nombre,
-                    "cedula": elegido.cedula,
-                    "nombre": f"{elegido.nombre} {elegido.apellido}"
-                })
-
-        dia_actual += timedelta(days=1)
-
-    session.commit()
-    return {
-        "mensaje": "Calendario generado correctamente.",
-        "total_guardias": len(asignaciones_creadas),
-        "detalle": asignaciones_creadas
-    }
+        session.commit()
+        return {
+            "mensaje": "Calendario generado correctamente.",
+            "total_guardias": len(asignaciones_creadas),
+            "detalle": asignaciones_creadas
+        }
+    except Exception as ex:
+        session.rollback()
+        _log_error("generar_calendario", ex)
+        return {"error": f"Error al generar calendario: {ex}"}
 
 def obtener_calendario(mes: int, año: int, session: Session) -> dict:
     """
     Devuelve el calendario de guardias generado para un mes,
     organizado como lista plana con todos los detalles del soldado.
     """
-    inicio = datetime(año, mes, 1)
-    if mes == 12:
-        proximo_mes = datetime(año + 1, 1, 1)
-    else:
-        proximo_mes = datetime(año, mes + 1, 1)
+    try:
+        inicio = datetime(año, mes, 1)
+        if mes == 12:
+            proximo_mes = datetime(año + 1, 1, 1)
+        else:
+            proximo_mes = datetime(año, mes + 1, 1)
 
-    query = (
-        select(Guardia, Asignacion, Soldado, PuntoGuardia)
-        .join(Asignacion, Guardia.id_guardia == Asignacion.id_guardia)
-        .join(Soldado, Asignacion.id_soldado == Soldado.id_soldado)
-        .join(PuntoGuardia, Guardia.id_punto == PuntoGuardia.id_punto)
-        .where(
-            Guardia.fecha_inicio >= inicio,
-            Guardia.fecha_inicio < proximo_mes,
-            Asignacion.es_titular
+        query = (
+            select(Guardia, Asignacion, Soldado, PuntoGuardia)
+            .join(Asignacion, Guardia.id_guardia == Asignacion.id_guardia)
+            .join(Soldado, Asignacion.id_soldado == Soldado.id_soldado)
+            .join(PuntoGuardia, Guardia.id_punto == PuntoGuardia.id_punto)
+            .where(
+                Guardia.fecha_inicio >= inicio,
+                Guardia.fecha_inicio < proximo_mes,
+                Asignacion.es_titular
+            )
+            .order_by(Guardia.fecha_inicio, PuntoGuardia.nombre)
         )
-        .order_by(Guardia.fecha_inicio, PuntoGuardia.nombre)
-    )
-    resultados = session.exec(query).all()
+        resultados = session.exec(query).all()
 
-    asignaciones = []
-    for guardia, asignacion, soldado, punto in resultados:
-        asignaciones.append({
-            "dia": guardia.fecha_inicio.day,
-            "turno": guardia.tipo,
-            "punto": punto.nombre,
-            "cedula": soldado.cedula,
-            "nombre": soldado.nombre,
-            "apellido": soldado.apellido,
-            "rango": soldado.rango,
-            "unidad": soldado.unidad,
-            "id_asignacion": asignacion.id_asignacion,
-        })
+        asignaciones = []
+        for guardia, asignacion, soldado, punto in resultados:
+            asignaciones.append({
+                "dia": guardia.fecha_inicio.day,
+                "turno": guardia.tipo,
+                "punto": punto.nombre,
+                "cedula": soldado.cedula,
+                "nombre": soldado.nombre,
+                "apellido": soldado.apellido,
+                "rango": soldado.rango,
+                "unidad": soldado.unidad,
+                "id_asignacion": asignacion.id_asignacion,
+            })
 
-    return {
-        "mes": mes,
-        "año": año,
-        "asignaciones": asignaciones
-    }
-    
+        return {"mes": mes, "año": año, "asignaciones": asignaciones}
+    except Exception as ex:
+        _log_error("obtener_calendario", ex)
+        return {"error": f"Error al obtener calendario: {ex}"}
+
 def buscar_candidatos_sustitucion(id_asignacion_original: int, session: Session) -> dict:
     """Busca los mejores candidatos para sustituir a un soldado, incluyendo intercambios directos."""
-    asignacion_original = session.get(Asignacion, id_asignacion_original)
-    if not asignacion_original:
-        return {"error": "Asignación no encontrada."}
-    
-    guardia_original = session.get(Guardia, asignacion_original.id_guardia)
-    if not guardia_original:
-        return {"error": "Guardia no encontrada."}
-    
-    soldados = session.exec(select(Soldado)).all()
-    fecha_guardia = guardia_original.fecha_inicio
-    
-    # Restricciones en esa fecha
-    restricciones = session.exec(
-        select(Restriccion).where(
-            Restriccion.fecha_inicio <= fecha_guardia.date(),
-            Restriccion.fecha_fin >= fecha_guardia.date()
-        )
-    ).all()
+    try:
+        asignacion_original = session.get(Asignacion, id_asignacion_original)
+        if not asignacion_original:
+            return {"error": "Asignación no encontrada."}
 
-    # --- Calcular puntos acumulados de cada soldado en este mes ---
-    inicio_mes = fecha_guardia.replace(day=1)
-    if fecha_guardia.month == 12:
-        fin_mes = inicio_mes.replace(year=fecha_guardia.year + 1, month=1) - timedelta(days=1)
-    else:
-        fin_mes = inicio_mes.replace(month=fecha_guardia.month + 1) - timedelta(days=1)
+        guardia_original = session.get(Guardia, asignacion_original.id_guardia)
+        if not guardia_original:
+            return {"error": "Guardia no encontrada."}
 
-    puntos_soldados = {}
-    for s in soldados:
-        total = 0.0
-        asignaciones_mes = session.exec(
-            select(Asignacion)
-            .join(Guardia)
-            .where(
-                Asignacion.id_soldado == s.id_soldado,
-                Asignacion.es_titular,
-                not Asignacion.es_anulada,
-                Guardia.fecha_inicio >= inicio_mes,
-                Guardia.fecha_inicio <= fin_mes
+        soldados = session.exec(select(Soldado)).all()
+        fecha_guardia = guardia_original.fecha_inicio
+
+        restricciones = session.exec(
+            select(Restriccion).where(
+                Restriccion.fecha_inicio <= fecha_guardia.date(),
+                Restriccion.fecha_fin >= fecha_guardia.date()
             )
         ).all()
-        for a in asignaciones_mes:
-            g = session.get(Guardia, a.id_guardia)
-            if g:
-                factor = FACTOR_TURNO.get(g.tipo, 1.0)
-                if g.fecha_inicio.weekday() in (5, 6):
-                    factor *= FACTOR_FIN_SEMANA
-                total += factor
-        puntos_soldados[s.id_soldado] = total
-    # ------------------------------------------------------------
 
-    # 1. Buscar intercambios directos (A <-> B)
-    intercambios = []
-    candidatos_ideales = []
-    candidatos_fatigados = []
-    
-    for s in soldados:
-        if s.id_soldado == asignacion_original.id_soldado:
-            continue
-        
-        # Verificar restricciones de s para la guardia original
-        if any(r.id_soldado == s.id_soldado for r in restricciones):
-            continue
-        
-        # Verificar si s puede cubrir la guardia original (fatiga)
-        puede_cubrir = _puede_cubrir_guardia(s, fecha_guardia, session)
-        
-        # Buscar trueques para este s
-        if puede_cubrir["disponible"]:
-            guardia_de_s = session.exec(
-                select(Guardia)
-                .join(Asignacion)
+        inicio_mes = fecha_guardia.replace(day=1)
+        if fecha_guardia.month == 12:
+            fin_mes = inicio_mes.replace(year=fecha_guardia.year + 1, month=1) - timedelta(days=1)
+        else:
+            fin_mes = inicio_mes.replace(month=fecha_guardia.month + 1) - timedelta(days=1)
+
+        puntos_soldados = {}
+        for s in soldados:
+            total = 0.0
+            asignaciones_mes = session.exec(
+                select(Asignacion)
+                .join(Guardia)
                 .where(
                     Asignacion.id_soldado == s.id_soldado,
                     Asignacion.es_titular,
-                    not Asignacion.es_anulada,
-                    Guardia.fecha_inicio > fecha_guardia
+                    ~Asignacion.es_anulada,
+                    Guardia.fecha_inicio >= inicio_mes,
+                    Guardia.fecha_inicio <= fin_mes
                 )
-                .order_by(Guardia.fecha_inicio)
-            ).first()
-            
-            if guardia_de_s:
-                puede_cubrir_A = _puede_cubrir_guardia(
-                    session.get(Soldado, asignacion_original.id_soldado),
-                    guardia_de_s.fecha_inicio,
-                    session
-                )
-                if puede_cubrir_A["disponible"]:
-                    intercambios.append({
-                        "id_soldado_B": s.id_soldado,
-                        "cedula_B": s.cedula,
-                        "nombre_B": f"{s.nombre} {s.apellido}",
-                        "rango_B": s.rango,
-                        "dia_B": guardia_de_s.fecha_inicio.day,
-                        "turno_B": guardia_de_s.tipo,
-                        "id_asignacion_B": session.exec(
-                            select(Asignacion.id_asignacion).where(
-                                Asignacion.id_soldado == s.id_soldado,
-                                Asignacion.id_guardia == guardia_de_s.id_guardia
-                            )
-                        ).first()
-                    })
-        
-        # Clasificar en ideales o fatigados
-        if puede_cubrir["disponible"]:
-            candidatos_ideales.append((s, puede_cubrir["horas_descanso"], "✅ Ideal"))
+            ).all()
+            for a in asignaciones_mes:
+                g = session.get(Guardia, a.id_guardia)
+                if g:
+                    factor = FACTOR_TURNO.get(g.tipo, 1.0)
+                    if g.fecha_inicio.weekday() in (5, 6):
+                        factor *= FACTOR_FIN_SEMANA
+                    total += factor
+            puntos_soldados[s.id_soldado] = total
+
+        intercambios = []
+        candidatos_ideales = []
+        candidatos_fatigados = []
+
+        for s in soldados:
+            if s.id_soldado == asignacion_original.id_soldado:
+                continue
+            if any(r.id_soldado == s.id_soldado for r in restricciones):
+                continue
+            puede_cubrir = _puede_cubrir_guardia(s, fecha_guardia, session)
+
+            if puede_cubrir["disponible"]:
+                guardia_de_s = session.exec(
+                    select(Guardia)
+                    .join(Asignacion)
+                    .where(
+                        Asignacion.id_soldado == s.id_soldado,
+                        Asignacion.es_titular,
+                        ~Asignacion.es_anulada,
+                        Guardia.fecha_inicio > fecha_guardia
+                    )
+                    .order_by(Guardia.fecha_inicio)
+                ).first()
+
+                if guardia_de_s:
+                    puede_cubrir_a = _puede_cubrir_guardia(
+                        session.get(Soldado, asignacion_original.id_soldado),
+                        guardia_de_s.fecha_inicio,
+                        session
+                    )
+                    if puede_cubrir_a["disponible"]:
+                        intercambios.append({
+                            "id_soldado_B": s.id_soldado,
+                            "cedula_B": s.cedula,
+                            "nombre_B": f"{s.nombre} {s.apellido}",
+                            "rango_B": s.rango,
+                            "dia_B": guardia_de_s.fecha_inicio.day,
+                            "turno_B": guardia_de_s.tipo,
+                            "id_asignacion_B": session.exec(
+                                select(Asignacion.id_asignacion).where(
+                                    Asignacion.id_soldado == s.id_soldado,
+                                    Asignacion.id_guardia == guardia_de_s.id_guardia
+                                )
+                            ).first()
+                        })
+
+            if puede_cubrir["disponible"]:
+                candidatos_ideales.append((s, puede_cubrir["horas_descanso"], "✅ Ideal"))
+            else:
+                candidatos_fatigados.append((s, puede_cubrir["horas_descanso"], f"⚠️ Solo {puede_cubrir['horas_descanso']:.0f}h descanso"))
+
+        def clave(item):
+            s, _, _ = item
+            puntos = puntos_soldados.get(s.id_soldado, 999)
+            prioridad = PRIORIDAD_RANGO.get(s.rango, 99)
+            return (puntos, prioridad, s.cedula)
+
+        candidatos_ideales.sort(key=clave)
+        candidatos_fatigados.sort(key=clave)
+
+        if intercambios or candidatos_ideales:
+            candidatos_finales = candidatos_ideales
         else:
-            candidatos_fatigados.append((s, puede_cubrir["horas_descanso"], f"⚠️ Solo {puede_cubrir['horas_descanso']:.0f}h descanso"))
-    
-    # --- Ordenar por puntos acumulados del mes ---
-    def clave(item):
-        s, _, _ = item
-        puntos = puntos_soldados.get(s.id_soldado, 999)
-        prioridad = PRIORIDAD_RANGO.get(s.rango, 99)
-        return (puntos, prioridad, s.cedula)
-    
-    candidatos_ideales.sort(key=clave)
-    candidatos_fatigados.sort(key=clave)
-    # ------------------------------------------
+            candidatos_finales = candidatos_fatigados
 
-    # Decidir qué candidatos mostrar
-    if intercambios or candidatos_ideales:
-        candidatos_finales = candidatos_ideales
-    else:
-        candidatos_finales = candidatos_fatigados
-    
-    # --- Limitar resultados ---
-    return {
-        "intercambios": intercambios[:5],
-        "candidatos": [
-            {
-                "id_soldado": s.id_soldado,
-                "cedula": s.cedula,
-                "nombre": f"{s.nombre} {s.apellido}",
-                "rango": s.rango,
-                "estado": estado
-            } for s, _, estado in candidatos_finales[:5]
-        ]
-    }
-    # -------------------------
-
+        return {
+            "intercambios": intercambios[:5],
+            "candidatos": [
+                {
+                    "id_soldado": s.id_soldado,
+                    "cedula": s.cedula,
+                    "nombre": f"{s.nombre} {s.apellido}",
+                    "rango": s.rango,
+                    "estado": estado
+                } for s, _, estado in candidatos_finales[:5]
+            ]
+        }
+    except Exception as ex:
+        _log_error("buscar_candidatos_sustitucion", ex)
+        return {"error": f"Error al buscar candidatos: {ex}"}
 
 def _puede_cubrir_guardia(soldado: Soldado, fecha_guardia: datetime, session: Session) -> dict:
     """Verifica si un soldado puede cubrir una guardia en una fecha dada (fatiga)."""
@@ -409,141 +432,145 @@ def _puede_cubrir_guardia(soldado: Soldado, fecha_guardia: datetime, session: Se
         .where(
             Asignacion.id_soldado == soldado.id_soldado,
             Asignacion.es_titular,
-            not Asignacion.es_anulada,
+            ~Asignacion.es_anulada,
             Guardia.fecha_fin < fecha_guardia
         )
         .order_by(Guardia.fecha_fin.desc())
     ).first()
-    
+
     if ultima_asignacion is None:
         return {"disponible": True, "horas_descanso": 999}
-    
+
     ultima_guardia = session.get(Guardia, ultima_asignacion.id_guardia)
     horas_descanso = (fecha_guardia - ultima_guardia.fecha_fin).total_seconds() / 3600
-    
+
     return {
         "disponible": horas_descanso >= 48,
         "horas_descanso": horas_descanso
     }
-    
+
 def confirmar_sustitucion(id_asignacion_original: int, id_nuevo_soldado: int, session: Session) -> dict:
     """Realiza la sustitución simple: anula la original y crea una nueva asignación titular."""
-    asignacion_original = session.get(Asignacion, id_asignacion_original)
-    if not asignacion_original:
-        return {"error": "Asignación original no encontrada."}
-    
-    # 1. Anular la asignación original del titular
-    asignacion_original.es_anulada = True
-    session.add(asignacion_original)
-    
-    # 2. Crear nueva asignación para el sustituto (como titular)
-    nueva_asignacion = Asignacion(
-        id_soldado=id_nuevo_soldado,
-        id_guardia=asignacion_original.id_guardia,
-        es_titular=True,  # <-- Ahora cuenta para sus estadísticas
-        id_asignacion_original=asignacion_original.id_asignacion
-    )
-    session.add(nueva_asignacion)
-    session.commit()
-    session.refresh(nueva_asignacion)
-    
-    return {
-        "mensaje": "Sustitución realizada correctamente.",
-        "id_nueva_asignacion": nueva_asignacion.id_asignacion
-    }
-    
-def confirmar_trueque(id_asignacion_A: int, id_asignacion_B: int, id_soldado_B: int, session: Session) -> dict:
+    try:
+        asignacion_original = session.get(Asignacion, id_asignacion_original)
+        if not asignacion_original:
+            return {"error": "Asignación original no encontrada."}
+
+        asignacion_original.es_anulada = True
+        session.add(asignacion_original)
+
+        nueva_asignacion = Asignacion(
+            id_soldado=id_nuevo_soldado,
+            id_guardia=asignacion_original.id_guardia,
+            es_titular=True,
+            id_asignacion_original=asignacion_original.id_asignacion
+        )
+        session.add(nueva_asignacion)
+        session.commit()
+        session.refresh(nueva_asignacion)
+
+        return {"mensaje": "Sustitución realizada correctamente.", "id_nueva_asignacion": nueva_asignacion.id_asignacion}
+    except Exception as ex:
+        session.rollback()
+        _log_error("confirmar_sustitucion", ex)
+        return {"error": f"Error al realizar sustitución: {ex}"}
+
+def confirmar_trueque(id_asignacion_a: int, id_asignacion_b: int, id_soldado_b: int, session: Session) -> dict:
     """Intercambia los soldados de dos guardias (trueque binario)."""
-    asignacion_A = session.get(Asignacion, id_asignacion_A)
-    asignacion_B = session.get(Asignacion, id_asignacion_B)
-    
-    if not asignacion_A or not asignacion_B:
-        return {"error": "Alguna de las asignaciones no fue encontrada."}
-    
-    # Obtener las guardias para acceder a las fechas
-    guardia_A = session.get(Guardia, asignacion_A.id_guardia)
-    guardia_B = session.get(Guardia, asignacion_B.id_guardia)
-    if not guardia_A or not guardia_B:
-        return {"error": "Alguna de las guardias no fue encontrada."}
-    
-    # Guardar nombres originales ANTES del intercambio
-    soldado_original_A = session.get(Soldado, asignacion_A.id_soldado)
-    nombre_original_A = f"{soldado_original_A.nombre} {soldado_original_A.apellido}" if soldado_original_A else "Desconocido"
-    soldado_original_B = session.get(Soldado, asignacion_B.id_soldado)
-    nombre_original_B = f"{soldado_original_B.nombre} {soldado_original_B.apellido}" if soldado_original_B else "Desconocido"
-    
-    # Intercambiar soldados
-    id_soldado_A = asignacion_A.id_soldado
-    asignacion_A.id_soldado = id_soldado_B
-    asignacion_B.id_soldado = id_soldado_A
-    
-    session.add(asignacion_A)
-    session.add(asignacion_B)
-    session.flush()
-    
-    # Crear novedad de auditoría para el historial (usando fechas de guardias)
-    texto_trueque = f"{nombre_original_A} (Día {guardia_A.fecha_inicio.day}) ↔ {nombre_original_B} (Día {guardia_B.fecha_inicio.day})"
-    novedad = Novedad(
-        id_asignacion=asignacion_A.id_asignacion,
-        descripcion=f"TRUEQUE:{texto_trueque}",
-        fecha_reporte=guardia_A.fecha_inicio  # <-- Usar fecha de la guardia
-    )
-    session.add(novedad)
-    session.commit()
-    
-    return {"mensaje": "Trueque realizado correctamente."}
+    try:
+        asignacion_a = session.get(Asignacion, id_asignacion_a)
+        asignacion_b = session.get(Asignacion, id_asignacion_b)
+
+        if not asignacion_a or not asignacion_b:
+            return {"error": "Alguna de las asignaciones no fue encontrada."}
+
+        guardia_a = session.get(Guardia, asignacion_a.id_guardia)
+        guardia_b = session.get(Guardia, asignacion_b.id_guardia)
+        if not guardia_a or not guardia_b:
+            return {"error": "Alguna de las guardias no fue encontrada."}
+
+        soldado_original_a = session.get(Soldado, asignacion_a.id_soldado)
+        nombre_original_a = f"{soldado_original_a.nombre} {soldado_original_a.apellido}" if soldado_original_a else "Desconocido"
+        soldado_original_b = session.get(Soldado, asignacion_b.id_soldado)
+        nombre_original_b = f"{soldado_original_b.nombre} {soldado_original_b.apellido}" if soldado_original_b else "Desconocido"
+
+        id_soldado_a = asignacion_a.id_soldado
+        asignacion_a.id_soldado = id_soldado_b
+        asignacion_b.id_soldado = id_soldado_a
+
+        session.add(asignacion_a)
+        session.add(asignacion_b)
+        session.flush()
+
+        texto_trueque = f"{nombre_original_a} (Día {guardia_a.fecha_inicio.day}) ↔ {nombre_original_b} (Día {guardia_b.fecha_inicio.day})"
+        novedad = Novedad(
+            id_asignacion=asignacion_a.id_asignacion,
+            descripcion=f"TRUEQUE:{texto_trueque}",
+            fecha_reporte=guardia_a.fecha_inicio
+        )
+        session.add(novedad)
+        session.commit()
+
+        return {"mensaje": "Trueque realizado correctamente."}
+    except Exception as ex:
+        session.rollback()
+        _log_error("confirmar_trueque", ex)
+        return {"error": f"Error al realizar trueque: {ex}"}
 
 def obtener_ficha_soldado(id_soldado: int, mes: int, año: int, session: Session) -> dict:
     """Devuelve el historial de guardias de un soldado en un mes."""
-    inicio = datetime(año, mes, 1)
-    if mes == 12:
-        proximo_mes = datetime(año + 1, 1, 1)
-    else:
-        proximo_mes = datetime(año, mes + 1, 1)
+    try:
+        inicio = datetime(año, mes, 1)
+        if mes == 12:
+            proximo_mes = datetime(año + 1, 1, 1)
+        else:
+            proximo_mes = datetime(año, mes + 1, 1)
 
-    query = (
-        select(Asignacion, Guardia, PuntoGuardia)
-        .join(Guardia, Asignacion.id_guardia == Guardia.id_guardia)
-        .join(PuntoGuardia, Guardia.id_punto == PuntoGuardia.id_punto)
-        .where(
-            Asignacion.id_soldado == id_soldado,
-            Guardia.fecha_inicio >= inicio,
-            Guardia.fecha_inicio < proximo_mes,
-            not Asignacion.es_anulada   
+        query = (
+            select(Asignacion, Guardia, PuntoGuardia)
+            .join(Guardia, Asignacion.id_guardia == Guardia.id_guardia)
+            .join(PuntoGuardia, Guardia.id_punto == PuntoGuardia.id_punto)
+            .where(
+                Asignacion.id_soldado == id_soldado,
+                Guardia.fecha_inicio >= inicio,
+                Guardia.fecha_inicio < proximo_mes,
+                ~Asignacion.es_anulada
+            )
+            .order_by(Guardia.fecha_inicio)
         )
-        .order_by(Guardia.fecha_inicio)
-    )
-    resultados = session.exec(query).all()
+        resultados = session.exec(query).all()
 
-    guardias = []
-    total_puntos = 0.0
-    for asignacion, guardia, punto in resultados:
-        factor = FACTOR_TURNO.get(guardia.tipo, 1.0)
-        if guardia.fecha_inicio.weekday() in (5, 6):
-            factor *= FACTOR_FIN_SEMANA
-        total_puntos += factor
+        guardias = []
+        total_puntos = 0.0
+        for asignacion, guardia, punto in resultados:
+            factor = FACTOR_TURNO.get(guardia.tipo, 1.0)
+            if guardia.fecha_inicio.weekday() in (5, 6):
+                factor *= FACTOR_FIN_SEMANA
+            total_puntos += factor
+            guardias.append({
+                "dia": guardia.fecha_inicio.day,
+                "turno": guardia.tipo,
+                "punto": punto.nombre,
+                "es_titular": asignacion.es_titular,
+                "factor": factor,
+            })
 
-        guardias.append({
-            "dia": guardia.fecha_inicio.day,
-            "turno": guardia.tipo,
-            "punto": punto.nombre,
-            "es_titular": asignacion.es_titular,
-            "factor": factor,
-        })
+        soldado = session.get(Soldado, id_soldado)
+        nombre_soldado = f"{soldado.nombre} {soldado.apellido}" if soldado else "Desconocido"
 
-    soldado = session.get(Soldado, id_soldado)
-    nombre_soldado = f"{soldado.nombre} {soldado.apellido}" if soldado else "Desconocido"
+        return {
+            "id_soldado": id_soldado,
+            "nombre": nombre_soldado,
+            "mes": mes,
+            "año": año,
+            "total_guardias": len(guardias),
+            "total_puntos": total_puntos,
+            "guardias": guardias
+        }
+    except Exception as ex:
+        _log_error("obtener_ficha_soldado", ex)
+        return {"error": f"Error al obtener ficha del soldado: {ex}"}
 
-    return {
-        "id_soldado": id_soldado,
-        "nombre": nombre_soldado,
-        "mes": mes,
-        "año": año,
-        "total_guardias": len(guardias),
-        "total_puntos": total_puntos,
-        "guardias": guardias
-    }
-    
 def crear_soldado(cedula: str, nombre: str, apellido: str, rango: str, unidad: str, session: Session) -> dict:
     """Crea un nuevo soldado y lo guarda en la base de datos."""
     try:
@@ -552,8 +579,9 @@ def crear_soldado(cedula: str, nombre: str, apellido: str, rango: str, unidad: s
         session.commit()
         session.refresh(soldado)
         return {"mensaje": "Soldado creado correctamente.", "id_soldado": soldado.id_soldado}
-    except IntegrityError:
+    except IntegrityError as ex:
         session.rollback()
+        _log_error("crear_soldado", ex)
         return {"error": "Ya existe un soldado con esa cédula."}
 
 def actualizar_soldado(id_soldado: int, cedula: str, nombre: str, apellido: str, rango: str, unidad: str, session: Session) -> dict:
@@ -569,8 +597,9 @@ def actualizar_soldado(id_soldado: int, cedula: str, nombre: str, apellido: str,
     try:
         session.commit()
         return {"mensaje": "Soldado actualizado correctamente."}
-    except IntegrityError:
+    except IntegrityError as ex:
         session.rollback()
+        _log_error("actualizar_soldado", ex)
         return {"error": "Ya existe otro soldado con esa cédula."}
 
 def eliminar_soldado(id_soldado: int, session: Session) -> dict:
@@ -589,8 +618,9 @@ def crear_punto(nombre: str, descripcion: str, session: Session) -> dict:
         session.commit()
         session.refresh(punto)
         return {"mensaje": "Punto de guardia creado.", "id": punto.id_punto}
-    except IntegrityError:
+    except IntegrityError as ex:
         session.rollback()
+        _log_error("crear_punto", ex)
         return {"error": "Ya existe un punto con ese nombre."}
 
 def editar_punto(id_punto: int, nombre: str, descripcion: str, session: Session) -> dict:
@@ -602,8 +632,9 @@ def editar_punto(id_punto: int, nombre: str, descripcion: str, session: Session)
     try:
         session.commit()
         return {"mensaje": "Punto actualizado correctamente."}
-    except IntegrityError:
+    except IntegrityError as ex:
         session.rollback()
+        _log_error("editar_punto", ex)
         return {"error": "Ya existe un punto con ese nombre."}
 
 def eliminar_punto(id_punto: int, session: Session) -> dict:
@@ -620,7 +651,7 @@ def listar_puntos(session: Session):
         {"id": p.id_punto, "nombre": p.nombre, "descripcion": p.descripcion or ""}
         for p in puntos
     ]
-    
+
 def generar_pdf(mes: int, año: int, session: Session) -> BytesIO:
     """
     Genera un PDF del calendario de guardias de un mes.
@@ -666,7 +697,7 @@ def generar_pdf(mes: int, año: int, session: Session) -> BytesIO:
             Guardia.fecha_inicio >= inicio,
             Guardia.fecha_inicio < proximo_mes,
             Asignacion.es_titular,
-            not Asignacion.es_anulada,
+            ~Asignacion.es_anulada,
         )
         .order_by(PuntoGuardia.nombre, Guardia.fecha_inicio, Guardia.tipo)
     )
@@ -804,7 +835,7 @@ def listar_novedades(mes: int, año: int, session: Session) -> list:
         .where(
             Guardia.fecha_inicio >= inicio,
             Guardia.fecha_inicio < proximo_mes,
-            not Asignacion.es_anulada,
+            ~Asignacion.es_anulada,
         )
         .order_by(Guardia.fecha_inicio.desc())
     )
@@ -825,15 +856,23 @@ def listar_novedades(mes: int, año: int, session: Session) -> list:
         })
     return novedades
 
-def obtener_estadisticas(mes: int, año: int, session: Session) -> dict:
-    """Devuelve estadísticas completas del mes: KPIs, equidad, rankings y detalles de incidencias."""
-    inicio = datetime(año, mes, 1)
+def obtener_estadisticas(mes: int, año: int, session: Session, meses: int = 1) -> dict:
+    """Devuelve estadísticas del período: KPIs, equidad, rankings y detalles.
+    meses=1 → solo el mes indicado. meses=6 → acumulado de los últimos 6 meses."""
+    # Calcular rango del período
+    if meses < 1:
+        meses = 1
+    if meses > mes:
+        mes_inicio = 1
+    else:
+        mes_inicio = mes - meses + 1
+    inicio = datetime(año, mes_inicio, 1)
     if mes == 12:
         proximo_mes = datetime(año + 1, 1, 1)
     else:
         proximo_mes = datetime(año, mes + 1, 1)
 
-    # --- Guardias titulares del mes (para la mayoría de métricas) ---
+    # --- Guardias titulares del período ---
     query_titulares = (
         select(Soldado, Asignacion, Guardia)
         .join(Asignacion, Soldado.id_soldado == Asignacion.id_soldado)
@@ -842,12 +881,12 @@ def obtener_estadisticas(mes: int, año: int, session: Session) -> dict:
             Guardia.fecha_inicio >= inicio,
             Guardia.fecha_inicio < proximo_mes,
             Asignacion.es_titular,
-            not Asignacion.es_anulada
+            ~Asignacion.es_anulada
         )
     )
     titulares = session.exec(query_titulares).all()
 
-    # --- Sustituciones del mes (es_titular=False) ---
+    # --- Sustituciones del período (es_titular=False) ---
     query_sustituciones = (
         select(Asignacion, Guardia, Soldado)
         .join(Guardia, Asignacion.id_guardia == Guardia.id_guardia)
@@ -855,12 +894,12 @@ def obtener_estadisticas(mes: int, año: int, session: Session) -> dict:
         .where(
             Guardia.fecha_inicio >= inicio,
             Guardia.fecha_inicio < proximo_mes,
-            not Asignacion.es_titular
+            ~Asignacion.es_titular
         )
     )
     sustituciones_data = session.exec(query_sustituciones).all()
 
-    # --- Restricciones que se solapan con el mes ---
+    # --- Restricciones que se solapan con el período ---
     restricciones_data = session.exec(
         select(Restriccion, Soldado)
         .join(Soldado, Restriccion.id_soldado == Soldado.id_soldado)
@@ -948,6 +987,12 @@ def obtener_estadisticas(mes: int, año: int, session: Session) -> dict:
         })
 
     return {
+        "periodo": {
+            "meses": meses,
+            "mes_inicio": mes_inicio,
+            "mes_fin": mes,
+            "total_meses_periodo": mes - mes_inicio + 1,
+        },
         "kpi": {
             "total_guardias": total_guardias,
             "total_sustituciones": total_sustituciones,
@@ -968,8 +1013,9 @@ def obtener_estadisticas(mes: int, año: int, session: Session) -> dict:
         },
         "detalle_sustituciones": detalle_sustituciones,
         "detalle_restricciones": detalle_restricciones,
+        "todos_soldados": lista_soldados,
     }
-    
+
 def obtener_historial_sustituciones(mes: int, año: int, session: Session) -> list:
     """Devuelve el historial de sustituciones de un mes, con trueques enriquecidos."""
     inicio = datetime(año, mes, 1)
@@ -1062,7 +1108,7 @@ async def difundir_pdf(mes: int, año: int, session: Session) -> dict:
     # 3. Enviar directamente los bytes sin guardar en disco
     url = f"https://api.telegram.org/bot{token}/sendDocument"
     filename = f"Plan_de_Guardias_{mes}_{año}.pdf"
-    
+
     try:
         async with httpx.AsyncClient(timeout=30.0) as cliente:
             files = {"document": (filename, pdf_bytes, "application/pdf")}

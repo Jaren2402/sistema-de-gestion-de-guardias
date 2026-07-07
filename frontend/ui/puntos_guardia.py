@@ -4,38 +4,54 @@ from config import URL_BACKEND
 
 
 def build(page: ft.Page):
+    """Construye la interfaz de gestión de puntos de guardia: CRUD de ubicaciones."""
+    _exp = [3, 5, 2]
+
+    body = ft.Column(controls=[], scroll=ft.ScrollMode.ADAPTIVE, expand=True, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
+
+    header = ft.Container(
+        content=ft.Row([
+            ft.Container(ft.Text("NOMBRE", size=16, color="#DEDEDE", weight=ft.FontWeight.BOLD), expand=_exp[0]),
+            ft.Container(ft.Text("DESCRIPCI\u00d3N", size=16, color="#DEDEDE", weight=ft.FontWeight.BOLD), expand=_exp[1]),
+            ft.Container(ft.Text("ACCIONES", size=16, color="#DEDEDE", weight=ft.FontWeight.BOLD), expand=_exp[2]),
+        ]),
+        bgcolor="#25292E",
+        padding=ft.Padding(left=16, top=12, right=16, bottom=12),
+    )
+
+    tabla_container = ft.Container(
+        content=ft.Column([header, body]),
+        expand=True,
+        bgcolor="#121416",
+        border_radius=10,
+        clip_behavior=ft.ClipBehavior.HARD_EDGE,
+    )
+
     texto_estado = ft.Text()
     campo_nombre = ft.TextField(label="Nombre del punto", width=300)
-    campo_descripcion = ft.TextField(label="Descripción (opcional)", width=400)
+    campo_descripcion = ft.TextField(label="Descripci\u00f3n (opcional)", width=400)
     id_edicion = ft.TextField(label="ID", visible=False, disabled=True, width=100)
-
-    tabla_puntos = ft.DataTable(
-        columns=[
-            ft.DataColumn(ft.Text("Nombre")),
-            ft.DataColumn(ft.Text("Descripción")),
-            ft.DataColumn(ft.Text("Acciones")),
-        ],
-        rows=[],
-        border=ft.Border.all(1, ft.Colors.GREY_700),
-    )
 
     async def cargar_tabla():
         try:
             async with httpx.AsyncClient() as cliente:
                 resp = await cliente.get(f"{URL_BACKEND}/puntos")
                 datos = resp.json()
-                tabla_puntos.rows.clear()
+                body.controls.clear()
                 for p in datos:
-                    tabla_puntos.rows.append(ft.DataRow(cells=[
-                        ft.DataCell(ft.Text(p["nombre"])),
-                        ft.DataCell(ft.Text(p.get("descripcion", ""))),
-                        ft.DataCell(ft.Row([
-                            ft.IconButton(icon=ft.Icons.EDIT, tooltip="Editar",
-                                          data=p, on_click=seleccionar_para_editar),
-                            ft.IconButton(icon=ft.Icons.DELETE, tooltip="Eliminar",
-                                          data=p["id"], on_click=eliminar_punto),
-                        ])),
-                    ]))
+                    body.controls.append(ft.Container(
+                        content=ft.Row([
+                            ft.Container(ft.Text(p["nombre"], size=16, color="#DEDEDE"), expand=_exp[0]),
+                            ft.Container(ft.Text(p.get("descripcion", ""), size=16, color="#DEDEDE"), expand=_exp[1]),
+                            ft.Container(ft.Row([
+                                ft.IconButton(icon=ft.Icons.EDIT, tooltip="Editar", data=p, on_click=seleccionar_para_editar),
+                                ft.IconButton(icon=ft.Icons.DELETE, tooltip="Eliminar", data=p["id"], on_click=eliminar_punto),
+                            ]), expand=_exp[2]),
+                        ]),
+                        bgcolor="#171C22",
+                        height=40,
+                        padding=ft.Padding(left=16, top=0, right=16, bottom=0),
+                    ))
                 texto_estado.value = ""
         except Exception as ex:
             texto_estado.value = f"Error al cargar: {ex}"
@@ -60,7 +76,7 @@ def build(page: ft.Page):
 
     async def crear_o_actualizar(e):
         if not campo_nombre.value:
-            texto_estado.value = "⚠️ El nombre es obligatorio."
+            texto_estado.value = "El nombre es obligatorio."
             texto_estado.color = ft.Colors.YELLOW
             page.update()
             return
@@ -84,10 +100,10 @@ def build(page: ft.Page):
                     )
                 resultado = resp.json()
                 if "error" in resultado:
-                    texto_estado.value = f"❌ {resultado['error']}"
+                    texto_estado.value = resultado['error']
                     texto_estado.color = ft.Colors.RED
                 else:
-                    texto_estado.value = f"✅ {resultado['mensaje']}"
+                    texto_estado.value = resultado['mensaje']
                     texto_estado.color = ft.Colors.GREEN
                     limpiar_formulario()
                     await cargar_tabla()
@@ -104,10 +120,10 @@ def build(page: ft.Page):
                 resp = await cliente.delete(f"{URL_BACKEND}/puntos/eliminar/{id_punto}")
                 resultado = resp.json()
                 if "error" in resultado:
-                    texto_estado.value = f"❌ {resultado['error']}"
+                    texto_estado.value = resultado['error']
                     texto_estado.color = ft.Colors.RED
                 else:
-                    texto_estado.value = f"✅ {resultado['mensaje']}"
+                    texto_estado.value = resultado['mensaje']
                     texto_estado.color = ft.Colors.GREEN
                     await cargar_tabla()
         except Exception as ex:
@@ -126,8 +142,11 @@ def build(page: ft.Page):
         ft.Divider(),
         texto_estado,
         ft.Divider(),
-        ft.Text("Puntos de guardia registrados", weight=ft.FontWeight.BOLD),
-        tabla_puntos,
+        ft.Row([
+            ft.Container(expand=1),
+            ft.Container(content=tabla_container, expand=6, padding=ft.Padding(left=20, right=20, top=10, bottom=10)),
+            ft.Container(expand=1),
+        ], expand=True),
     ])
 
     page.run_task(cargar_tabla)

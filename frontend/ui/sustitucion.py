@@ -4,6 +4,7 @@ from config import URL_BACKEND
 
 
 def build(page: ft.Page, on_sustitucion_completada=None):
+    """Construye la interfaz de sustitución de guardias: búsqueda de candidatos, trueques y confirmación."""
     texto_estado = ft.Text()
     campo_id_asignacion = ft.TextField(label="ID de asignación a sustituir", width=250)
     boton_buscar = ft.Button("Buscar candidatos", on_click=lambda e: page.run_task(buscar_candidatos), icon=ft.Icons.SEARCH)
@@ -80,15 +81,15 @@ def build(page: ft.Page, on_sustitucion_completada=None):
         finally:
             page.update()
 
-    async def ejecutar_trueque(id_soldado_B, id_asignacion_B):
+    async def ejecutar_trueque(id_soldado_b, id_asignacion_b):
         id_asig = int(campo_id_asignacion.value)
         async with httpx.AsyncClient() as cliente:
             resp = await cliente.post(
                 f"{URL_BACKEND}/confirmar-trueque",
                 params={
-                    "id_asignacion_A": id_asig,
-                    "id_asignacion_B": id_asignacion_B,
-                    "id_soldado_B": id_soldado_B
+                    "id_asignacion_a": id_asig,
+                    "id_asignacion_b": id_asignacion_b,
+                    "id_soldado_b": id_soldado_b
                 }
             )
             datos = resp.json()

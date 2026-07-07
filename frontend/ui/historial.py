@@ -4,6 +4,7 @@ from config import URL_BACKEND
 
 
 def build(page: ft.Page):
+    """Construye el historial de sustituciones: registro de todos los cambios realizados."""
     texto_estado = ft.Text()
     selector_mes = ft.Dropdown(
         label="Mes",
@@ -46,7 +47,7 @@ def build(page: ft.Page):
                     cuerpo,
                 ]),
             ]),
-            bgcolor=ft.Colors.GREY_900, border_radius=10, padding=15, margin=8,
+            bgcolor="#1A1E24", border_radius=10, padding=15, margin=8,
         )
 
     # --- Función de carga ---

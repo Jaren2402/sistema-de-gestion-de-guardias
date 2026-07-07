@@ -1,18 +1,38 @@
-from fastapi import FastAPI, UploadFile, File, Depends, Request
-from fastapi.responses import Response, JSONResponse
+import io
+import traceback
 from contextlib import asynccontextmanager
+from datetime import date, datetime
+
+import pandas as pd
+from database import crear_tablas, get_session
+from dotenv import load_dotenv
+from fastapi import Depends, FastAPI, File, Request, UploadFile
+from fastapi.responses import JSONResponse, Response
+from models import Restriccion, Soldado
+from services import (
+    actualizar_soldado,
+    buscar_candidatos_sustitucion,
+    confirmar_sustitucion,
+    confirmar_trueque,
+    crear_novedad,
+    crear_punto,
+    crear_soldado,
+    difundir_pdf,
+    editar_punto,
+    eliminar_punto,
+    eliminar_soldado,
+    generar_calendario,
+    generar_pdf,
+    listar_novedades,
+    listar_puntos,
+    obtener_calendario,
+    obtener_estadisticas,
+    obtener_ficha_soldado,
+    obtener_historial_sustituciones,
+)
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
-import pandas as pd
-import traceback
-import io
-from services import generar_calendario, obtener_calendario, buscar_candidatos_sustitucion, confirmar_sustitucion, confirmar_trueque, obtener_ficha_soldado, crear_soldado, actualizar_soldado, eliminar_soldado, crear_punto, editar_punto, eliminar_punto, listar_puntos, generar_pdf, crear_novedad, listar_novedades, obtener_estadisticas, obtener_historial_sustituciones, difundir_pdf
 
-from datetime import date, datetime
-from models import Soldado, Restriccion
-from database import crear_tablas, get_session
-
-from dotenv import load_dotenv
 load_dotenv()
 
 @asynccontextmanager
@@ -45,7 +65,7 @@ async def importar_soldados(
 ):
     contenido = await archivo.read()
     df = pd.read_excel(io.BytesIO(contenido))
-    
+
     columnas_requeridas = {
         'cedula',
         'nombre',
@@ -73,10 +93,11 @@ async def importar_soldados(
                 unidad=str(fila["unidad"]),
             )
             session.add(soldado)
-            session.flush()  
+            session.flush()
             insertados += 1
-        except IntegrityError:
+        except IntegrityError as ex:
             session.rollback()
+            print(f"[ERROR] [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]: [importar_soldados] Cédula duplicada: {ex}")
             omitidos += 1
 
     session.commit()
@@ -84,7 +105,7 @@ async def importar_soldados(
     return {
         "mensaje": f"{insertados} soldados importados correctamente. {omitidos} omitidos (cédulas duplicadas o vacías)."
     }
-    
+
 @app.get("/soldados")
 def obtener_soldados(session: Session = Depends(get_session)):
     soldados = session.exec(select(Soldado)).all()
@@ -106,7 +127,7 @@ def generar_calendario_endpoint(mes: int, año: int, session: Session = Depends(
     Genera el calendario de guardias para un mes y año concretos.
     """
     resultado = generar_calendario(mes, año, session)
-    return resultado 
+    return resultado
 
 # @app.get("/calendario/{año}/{mes}")
 # def ver_calendario(año: int, mes: int, session: Session = Depends(get_session)):
@@ -114,7 +135,7 @@ def generar_calendario_endpoint(mes: int, año: int, session: Session = Depends(
 #     Devuelve el calendario de guardias para un mes y año concretos.
 #     """
 #     return obtener_calendario(mes, año, session)
- 
+
 @app.get("/calendario-ver/{ano}/{mes}")
 def ver_calendario(ano: int, mes: int, session: Session = Depends(get_session)):
     """
@@ -198,12 +219,12 @@ def confirmar_sustitucion_endpoint(
 
 @app.post("/confirmar-trueque")
 def confirmar_trueque_endpoint(
-    id_asignacion_A: int,
-    id_asignacion_B: int,
-    id_soldado_B: int,
+    id_asignacion_a: int,
+    id_asignacion_b: int,
+    id_soldado_b: int,
     session: Session = Depends(get_session)
 ):
-    resultado = confirmar_trueque(id_asignacion_A, id_asignacion_B, id_soldado_B, session)
+    resultado = confirmar_trueque(id_asignacion_a, id_asignacion_b, id_soldado_b, session)
     return resultado
 
 @app.get("/ficha-soldado-ver/{id_soldado}/{mes}/{ano}")
@@ -281,7 +302,7 @@ def exportar_pdf(mes: int, ano: int, session: Session = Depends(get_session)):
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename=Plan_de_Guardias_{mes}_{ano}.pdf"}
     )
-    
+
 @app.post("/novedades")
 def crear_novedad_endpoint(
     id_asignacion: int,
@@ -300,8 +321,8 @@ def listar_novedades_endpoint(
     return listar_novedades(mes, ano, session)
 
 @app.get("/estadisticas/{mes}/{ano}")
-def estadisticas_endpoint(mes: int, ano: int, session: Session = Depends(get_session)):
-    return obtener_estadisticas(mes, ano, session)
+def estadisticas_endpoint(mes: int, ano: int, meses: int = 1, session: Session = Depends(get_session)):
+    return obtener_estadisticas(mes, ano, session, meses)
 
 @app.get("/historial-sustituciones/{mes}/{ano}")
 def historial_sustituciones_endpoint(
