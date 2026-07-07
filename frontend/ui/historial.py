@@ -4,6 +4,7 @@ from config import URL_BACKEND
 
 
 def build(page: ft.Page):
+    """Construye el historial de sustituciones: registro de todos los cambios realizados."""
     texto_estado = ft.Text()
     selector_mes = ft.Dropdown(
         label="Mes",

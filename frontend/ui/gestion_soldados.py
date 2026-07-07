@@ -4,9 +4,10 @@ from config import URL_BACKEND
 
 
 def build(page: ft.Page):
-    # --- Estado y controles ---
+    """Construye el formulario de creación y edición de soldados (CRUD completo)."""
+    _datos = []
     texto_estado = ft.Text()
-    campo_cedula = ft.TextField(label="Cédula", width=150)
+    campo_cedula = ft.TextField(label="C\u00e9dula", width=150)
     campo_nombre = ft.TextField(label="Nombre", width=200)
     campo_apellido = ft.TextField(label="Apellido", width=200)
     campo_rango = ft.Dropdown(
@@ -14,58 +15,86 @@ def build(page: ft.Page):
         options=[ft.dropdown.Option(r) for r in [
             "cabo segundo", "cabo primero", "sargento segundo",
             "sargento primero", "sargento mayor", "teniente",
-            "primer teniente", "capitán"
+            "primer teniente", "capit\u00e1n"
         ]],
         width=180,
     )
     campo_unidad = ft.TextField(label="Unidad", width=200)
     id_edicion = ft.TextField(label="ID (solo lectura)", visible=False, disabled=True, width=100)
 
-    tabla_soldados = ft.DataTable(
-        columns=[
-            ft.DataColumn(ft.Text("CÉDULA")),
-            ft.DataColumn(ft.Text("NOMBRE")),
-            ft.DataColumn(ft.Text("APELLIDO")),
-            ft.DataColumn(ft.Text("RANGO")),
-            ft.DataColumn(ft.Text("UNIDAD")),
-            ft.DataColumn(ft.Text("ACCIONES")),
-        ],
-        rows=[],
-        border=ft.Border.all(1, ft.Colors.GREY_800),
-        border_radius=10,
-        bgcolor="#121416",
-        heading_row_color="#25292E",
-        heading_row_height=48,
-        data_row_min_height=36,
-        data_text_style=ft.TextStyle(size=16, color="#DEDEDE"),
-        column_spacing=30,
+    _exp = [1, 2, 2, 1, 1, 1]
+
+    body = ft.Column(controls=[], scroll=ft.ScrollMode.ADAPTIVE, expand=True, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
+
+    header = ft.Container(
+        content=ft.Row([
+            ft.Container(ft.Text("C\u00c9DULA", size=16, color="#DEDEDE", weight=ft.FontWeight.BOLD), expand=_exp[0]),
+            ft.Container(ft.Text("NOMBRE", size=16, color="#DEDEDE", weight=ft.FontWeight.BOLD), expand=_exp[1]),
+            ft.Container(ft.Text("APELLIDO", size=16, color="#DEDEDE", weight=ft.FontWeight.BOLD), expand=_exp[2]),
+            ft.Container(ft.Text("RANGO", size=16, color="#DEDEDE", weight=ft.FontWeight.BOLD), expand=_exp[3]),
+            ft.Container(ft.Text("UNIDAD", size=16, color="#DEDEDE", weight=ft.FontWeight.BOLD), expand=_exp[4]),
+            ft.Container(ft.Text("ACCIONES", size=16, color="#DEDEDE", weight=ft.FontWeight.BOLD), expand=_exp[5]),
+        ]),
+        bgcolor="#25292E",
+        padding=ft.Padding(left=16, top=12, right=16, bottom=12),
     )
 
-    # --- Funciones asíncronas ---
+    tabla_container = ft.Container(
+        content=ft.Column([header, body]),
+        expand=True,
+        bgcolor="#121416",
+        border_radius=10,
+        clip_behavior=ft.ClipBehavior.HARD_EDGE,
+    )
+
+    cont_tabla = ft.Row([
+        ft.Container(expand=1),
+        ft.Container(content=tabla_container, expand=6, padding=ft.Padding(left=20, right=20, top=10, bottom=10)),
+        ft.Container(expand=1),
+    ], expand=True)
+
+    txt_buscar = ft.TextField(
+        label="Buscar soldado",
+        hint_text="Nombre, c\u00e9dula o rango",
+        prefix_icon=ft.Icons.SEARCH,
+        width=300,
+        on_change=lambda e: _filtrar(),
+    )
+
+    def _filtrar():
+        q = txt_buscar.value.strip().lower()
+        filtrados = [s for s in _datos
+                     if not q or q in s["cedula"].lower()
+                     or q in s["nombre"].lower()
+                     or q in s["apellido"].lower()
+                     or q in s["rango"].lower()]
+        body.controls.clear()
+        for s in filtrados:
+            body.controls.append(ft.Container(
+                content=ft.Row([
+                    ft.Container(ft.Text(s["cedula"], size=16, color="#DEDEDE"), expand=_exp[0]),
+                    ft.Container(ft.Text(s["nombre"], size=16, color="#DEDEDE"), expand=_exp[1]),
+                    ft.Container(ft.Text(s["apellido"], size=16, color="#DEDEDE"), expand=_exp[2]),
+                    ft.Container(ft.Text(s["rango"], size=16, color="#DEDEDE"), expand=_exp[3]),
+                    ft.Container(ft.Text(s["unidad"], size=16, color="#DEDEDE"), expand=_exp[4]),
+                    ft.Container(ft.Row([
+                        ft.IconButton(icon=ft.Icons.EDIT, tooltip="Editar", data=s, on_click=seleccionar_para_editar),
+                        ft.IconButton(icon=ft.Icons.DELETE, tooltip="Eliminar", data=s["id_soldado"], on_click=eliminar_soldado),
+                    ]), expand=_exp[5]),
+                ]),
+                bgcolor="#171C22",
+                height=40,
+                padding=ft.Padding(left=16, top=0, right=16, bottom=0),
+            ))
+        page.update()
+
     async def cargar_tabla():
-        """Carga la tabla con todos los soldados."""
+        nonlocal _datos
         try:
             async with httpx.AsyncClient() as cliente:
                 resp = await cliente.get(f"{URL_BACKEND}/soldados")
-                datos = resp.json()
-                tabla_soldados.rows.clear()
-                for s in datos:
-                    tabla_soldados.rows.append(ft.DataRow(
-                        color="#171C22",
-                        cells=[
-                            ft.DataCell(ft.Text(s["cedula"])),
-                            ft.DataCell(ft.Text(s["nombre"])),
-                            ft.DataCell(ft.Text(s["apellido"])),
-                            ft.DataCell(ft.Text(s["rango"])),
-                            ft.DataCell(ft.Text(s["unidad"])),
-                            ft.DataCell(ft.Row([
-                                ft.IconButton(icon=ft.Icons.EDIT, tooltip="Editar",
-                                              data=s, on_click=seleccionar_para_editar),
-                                ft.IconButton(icon=ft.Icons.DELETE, tooltip="Eliminar",
-                                              data=s["id_soldado"], on_click=eliminar_soldado),
-                            ])),
-                        ]
-                    ))
+                _datos = resp.json()
+                _filtrar()
                 texto_estado.value = ""
         except Exception as ex:
             texto_estado.value = f"Error al cargar: {ex}"
@@ -84,7 +113,6 @@ def build(page: ft.Page):
         page.update()
 
     async def seleccionar_para_editar(e):
-        """Llena el formulario con los datos del soldado seleccionado."""
         s = e.control.data
         campo_cedula.value = s["cedula"]
         campo_nombre.value = s["nombre"]
@@ -96,9 +124,8 @@ def build(page: ft.Page):
         page.update()
 
     async def crear_o_actualizar(e):
-        """Crea o actualiza un soldado según si hay un ID de edición."""
         if not campo_cedula.value or not campo_nombre.value or not campo_apellido.value or not campo_rango.value:
-            texto_estado.value = "⚠️ Todos los campos son obligatorios."
+            texto_estado.value = "Todos los campos son obligatorios."
             texto_estado.color = ft.Colors.YELLOW
             page.update()
             return
@@ -114,23 +141,21 @@ def build(page: ft.Page):
         try:
             async with httpx.AsyncClient() as cliente:
                 if id_edicion.value:
-                    # Actualizar
                     resp = await cliente.put(
                         f"{URL_BACKEND}/soldados/editar/{id_edicion.value}",
                         params=datos,
                     )
                 else:
-                    # Crear
                     resp = await cliente.post(
                         f"{URL_BACKEND}/soldados/crear",
                         params=datos,
                     )
                 resultado = resp.json()
                 if "error" in resultado:
-                    texto_estado.value = f"❌ {resultado['error']}"
+                    texto_estado.value = f"{resultado['error']}"
                     texto_estado.color = ft.Colors.RED
                 else:
-                    texto_estado.value = f"✅ {resultado['mensaje']}"
+                    texto_estado.value = f"{resultado['mensaje']}"
                     texto_estado.color = ft.Colors.GREEN
                     limpiar_formulario()
                     await cargar_tabla()
@@ -141,17 +166,16 @@ def build(page: ft.Page):
             page.update()
 
     async def eliminar_soldado(e):
-        """Elimina un soldado por su ID."""
         id_soldado = e.control.data
         try:
             async with httpx.AsyncClient() as cliente:
                 resp = await cliente.delete(f"{URL_BACKEND}/soldados/eliminar/{id_soldado}")
                 resultado = resp.json()
                 if "error" in resultado:
-                    texto_estado.value = f"❌ {resultado['error']}"
+                    texto_estado.value = f"{resultado['error']}"
                     texto_estado.color = ft.Colors.RED
                 else:
-                    texto_estado.value = f"✅ {resultado['mensaje']}"
+                    texto_estado.value = f"{resultado['mensaje']}"
                     texto_estado.color = ft.Colors.GREEN
                     await cargar_tabla()
         except Exception as ex:
@@ -160,11 +184,9 @@ def build(page: ft.Page):
         finally:
             page.update()
 
-    # --- Botones ---
     boton_guardar = ft.Button("Guardar", on_click=crear_o_actualizar, icon=ft.Icons.SAVE)
     boton_cancelar = ft.Button("Cancelar", on_click=lambda e: limpiar_formulario(), icon=ft.Icons.CANCEL)
 
-    # --- Panel ---
     panel = ft.Column([
         ft.Text("Crear / Editar Soldado", weight=ft.FontWeight.BOLD, size=16),
         ft.Row([campo_cedula, campo_nombre, campo_apellido]),
@@ -173,11 +195,10 @@ def build(page: ft.Page):
         ft.Divider(),
         texto_estado,
         ft.Divider(),
-        ft.Text("Soldados registrados", weight=ft.FontWeight.BOLD),
-        tabla_soldados,
+        txt_buscar,
+        cont_tabla,
     ])
 
-    # Cargar datos al iniciar el módulo
     page.run_task(cargar_tabla)
 
     return {"panel": panel,

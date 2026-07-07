@@ -1,7 +1,8 @@
+import os
 import subprocess
 import sys
-import os
 import time
+
 
 def iniciar_backend():
     """Inicia el servidor FastAPI en segundo plano."""

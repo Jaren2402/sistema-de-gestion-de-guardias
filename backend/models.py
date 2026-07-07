@@ -1,11 +1,13 @@
-from sqlmodel import SQLModel, Field
+from datetime import date, datetime
 from typing import Optional
-from datetime import datetime, date
+
+from sqlmodel import Field, SQLModel
+
 
 # Tabla soldado
 class Soldado(SQLModel, table=True):
     __tablename__ = 'soldado'
-    
+
     # Atributos
     id_soldado: Optional[int] = Field(default=None, primary_key=True)
     nombre:   str
@@ -13,20 +15,20 @@ class Soldado(SQLModel, table=True):
     cedula:   str = Field(unique=True)
     rango:    str
     unidad:   str
-    
+
 # Tabla punto_guardia
 class PuntoGuardia(SQLModel, table=True):
     __tablename__ = "punto_guardia"
-    
+
     # Atributos
     id_punto   : Optional[int] = Field(default=None, primary_key=True)
     nombre     : str = Field(unique=True)  # Ej: "Entrada Principal"
     descripcion: Optional[str] = Field(default=None)
-    
+
 # Tabla guardia
 class Guardia(SQLModel, table=True):
     __tablename__ = 'guardia'
-    
+
     # Atributos
     id_guardia:   Optional[int] = Field(default=None, primary_key=True)
     fecha_inicio: datetime
@@ -38,7 +40,7 @@ class Guardia(SQLModel, table=True):
 # Tabla asignación
 class Asignacion(SQLModel, table=True):
     __tablename__ = 'asignacion'
-    
+
     # Atributos
     id_asignacion:          Optional[int] = Field(default=None, primary_key=True)
     id_soldado:             int = Field(foreign_key="soldado.id_soldado")
@@ -47,18 +49,18 @@ class Asignacion(SQLModel, table=True):
     es_titular:             bool = Field(default=True) # false si es reemplazo
     id_asignacion_original: Optional[int] = Field(default=None, foreign_key="asignacion.id_asignacion", nullable=True)
     es_anulada:             bool = Field(default=False)
-    
+
 # Tabla restricción
 class Restriccion(SQLModel, table=True):
     __tablename__ = 'restriccion'
-    
+
     # Atributos
     id_restriccion: Optional[int] = Field(default=None, primary_key=True)
     id_soldado:     int = Field(foreign_key="soldado.id_soldado")
-    fecha_inicio:   date  
-    fecha_fin:      date       
+    fecha_inicio:   date
+    fecha_fin:      date
     motivo:         str       # "Permiso", "Viaje", etc.
-    
+
 class Novedad(SQLModel, table=True):
     __tablename__ = "novedad"
     id_novedad: Optional[int] = Field(default=None, primary_key=True)
