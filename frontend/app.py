@@ -1,4 +1,7 @@
+import asyncio
+
 import flet as ft
+from theme import *
 from ui.calendario import build as build_calendario
 from ui.dashboard import build as build_dashboard
 from ui.ficha import build as build_ficha
@@ -13,9 +16,60 @@ from ui.sustitucion import build as build_sustitucion
 
 async def main(page: ft.Page):
     page.title = "Sistema de Guardias Militares"
-    page.theme = ft.Theme(font_family="Tahoma")
+    page.fonts = {
+        "Inter": [
+            "fonts/Inter-Regular.ttf",
+            "fonts/Inter-Bold.ttf",
+            "fonts/Inter-Medium.ttf",
+            "fonts/Inter-SemiBold.ttf",
+        ],
+    }
+    page.theme = ft.Theme(
+        color_scheme_seed=PRIMARY,
+        font_family=FONT_FAMILY,
+        scrollbar_theme=ft.ScrollbarTheme(
+            thickness=6,
+            radius=3,
+            thumb_color="#555555",
+            track_color="#151515",
+            interactive=True,
+        ),
+        filled_button_theme=ft.FilledButtonTheme(
+            style=ft.ButtonStyle(
+                color=ft.Colors.WHITE,
+                bgcolor={
+                    "default": BTN_BG,
+                    "hovered": BTN_HOVER,
+                },
+                text_style=ft.TextStyle(weight=ft.FontWeight.BOLD),
+                padding=22,
+                shape=ft.RoundedRectangleBorder(radius=10),
+            ),
+        ),
+        text_button_theme=ft.TextButtonTheme(
+            style=ft.ButtonStyle(
+                color={
+                    "default": TEXT_SECONDARY,
+                    "hovered": BTN_TEXT,
+                },
+                bgcolor={"hovered": BTN_HOVER},
+                shape=ft.RoundedRectangleBorder(radius=8),
+            ),
+        ),
+        icon_button_theme=ft.IconButtonTheme(
+            style=ft.ButtonStyle(
+                color={
+                    "default": TEXT_SECONDARY,
+                    "hovered": BTN_TEXT,
+                },
+                bgcolor={"hovered": BTN_HOVER},
+                shape=ft.RoundedRectangleBorder(radius=8),
+            ),
+        ),
+    )
+    page.theme.dropdown_theme = ft.DropdownTheme(text_style=ft.TextStyle(color=TEXT_SECONDARY))
     page.theme_mode = ft.ThemeMode.DARK
-    page.bgcolor = "#12161A"
+    page.bgcolor = BG
     page.padding = 0
 
     # Construir los módulos
@@ -34,9 +88,29 @@ async def main(page: ft.Page):
         await mod_ficha["cargar_dropdown"]()
         await mod_gestion["cargar_tabla"]()
 
-    mod_soldados = build_soldados(page, on_soldados_actualizados=on_soldados_actualizados)
+    is_extendido = True
+    idx_anterior = 0
 
-    # Definición de paneles
+    async def _ir_a_panel(idx):
+        nonlocal idx_anterior
+        idx_anterior = idx
+        nav_rail.selected_index = idx
+        panel_wrapper.opacity = 0
+        page.update()
+        await asyncio.sleep(0.18)
+        panel_scroll.controls.clear()
+        panel_scroll.controls.append(paneles[idx]["panel"])
+        panel_wrapper.opacity = 1
+        page.update()
+
+    async def ver_ficha_por_id(id_soldado):
+        import datetime
+        now = datetime.datetime.now()
+        await mod_ficha["cargar_para_soldado"](id_soldado, now.month, now.year)
+        await _ir_a_panel(3)
+
+    mod_soldados = build_soldados(page, on_soldados_actualizados=on_soldados_actualizados, on_ver_ficha=ver_ficha_por_id)
+
     paneles = [
         {"label": "Soldados",     "icon": ft.Icons.PEOPLE_OUTLINED,   "icon_sel": ft.Icons.PEOPLE,            "panel": mod_soldados["panel"]},
         {"label": "Calendario",   "icon": ft.Icons.CALENDAR_MONTH,    "icon_sel": ft.Icons.CALENDAR_MONTH,     "panel": mod_calendario["panel"]},
@@ -50,7 +124,6 @@ async def main(page: ft.Page):
         {"label": "Historial",    "icon": ft.Icons.HISTORY,           "icon_sel": ft.Icons.HISTORY,            "panel": mod_historial["panel"]},
     ]
 
-    # Forzar que los paneles expandan y las tablas llenen el ancho disponible
     for p in paneles:
         panel = p["panel"]
         panel.expand = True
@@ -73,30 +146,19 @@ async def main(page: ft.Page):
         expand=True,
         horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
     )
-
-    title_text = ft.Text("Soldados", size=20, weight=ft.FontWeight.BOLD, color="#E0E0E0")
-
-    # Área de contenido
-    contenedor_contenido = ft.Container(
-        content=ft.Column(
-            controls=[
-                ft.Container(
-                    content=title_text,
-                    padding=ft.Padding(left=0, top=4, right=0, bottom=4),
-                ),
-                ft.Divider(height=1, color="#2A2F35"),
-                panel_scroll,
-            ],
-            expand=True,
-            horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
-        ),
-        padding=ft.Padding(left=20, top=16, right=20, bottom=16),
+    panel_wrapper = ft.Container(
+        content=panel_scroll,
         expand=True,
-        bgcolor="#161A1E",
+        opacity=1,
+        animate_opacity=ft.Animation(180, ft.AnimationCurve.EASE_IN_OUT),
     )
 
-    is_extendido = True
-    idx_anterior = 0
+    contenedor_contenido = ft.Container(
+        content=panel_wrapper,
+        padding=ft.Padding(left=20, top=16, right=20, bottom=16),
+        expand=True,
+        bgcolor=CONTENT_BG,
+    )
 
     dests_paneles = [
         ft.NavigationRailDestination(
@@ -119,18 +181,13 @@ async def main(page: ft.Page):
         padding=ft.Padding(top=12, bottom=12, left=8, right=8),
     )
 
-    def _on_nav_change(e):
-        nonlocal idx_anterior
+    async def _on_nav_change(e):
         idx = e.control.selected_index
         if idx >= len(paneles):
             nav_rail.selected_index = idx_anterior
             _toggle_sidebar(e)
             return
-        idx_anterior = idx
-        title_text.value = paneles[idx]["label"]
-        panel_scroll.controls.clear()
-        panel_scroll.controls.append(paneles[idx]["panel"])
-        page.update()
+        await _ir_a_panel(idx)
 
     def _toggle_sidebar(e):
         nonlocal is_extendido
@@ -151,8 +208,8 @@ async def main(page: ft.Page):
         extended=is_extendido,
         min_width=56,
         min_extended_width=200,
-        bgcolor="#1A1E24",
-        indicator_color="#4CAF50",
+        bgcolor=SURFACE,
+        indicator_color=PRIMARY,
         label_type=ft.NavigationRailLabelType.ALL,
         use_indicator=True,
         indicator_shape=ft.RoundedRectangleBorder(radius=8),
@@ -161,8 +218,8 @@ async def main(page: ft.Page):
         leading=ft.Container(
             content=ft.Column(
                 controls=[
-                    ft.Icon(ft.Icons.SHIELD, color="#4CAF50", size=28),
-                    ft.Text("GV", size=10, weight=ft.FontWeight.BOLD, color="#4CAF50"),
+                    ft.Icon(ft.Icons.SHIELD, color=PRIMARY, size=28),
+                    ft.Text("GV", size=10, weight=ft.FontWeight.BOLD, color=PRIMARY),
                 ],
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                 spacing=2,
@@ -176,14 +233,14 @@ async def main(page: ft.Page):
     # Sidebar (solo el NavigationRail envuelto en un Container)
     sidebar = ft.Container(
         content=nav_rail,
-        bgcolor="#1A1E24",
+        bgcolor=SURFACE,
     )
 
     # Layout principal
     fila_principal = ft.Row(
         controls=[
             sidebar,
-            ft.VerticalDivider(width=1, color="#3A3F45"),
+            ft.VerticalDivider(width=1, color=DIVIDER),
             contenedor_contenido,
         ],
         expand=True,
@@ -193,10 +250,7 @@ async def main(page: ft.Page):
 
     # Pie
     footer = ft.Container(
-        content=ft.Column([
-            mod_soldados["barra_progreso"],
-            mod_soldados["texto_estado"],
-        ]),
+        content=mod_soldados["texto_estado"],
         padding=ft.Padding(left=20, top=5, right=20, bottom=10),
     )
 

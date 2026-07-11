@@ -574,7 +574,7 @@ def obtener_ficha_soldado(id_soldado: int, mes: int, año: int, session: Session
 def crear_soldado(cedula: str, nombre: str, apellido: str, rango: str, unidad: str, session: Session) -> dict:
     """Crea un nuevo soldado y lo guarda en la base de datos."""
     try:
-        soldado = Soldado(cedula=cedula, nombre=nombre, apellido=apellido, rango=rango, unidad=unidad)
+        soldado = Soldado(cedula=cedula, nombre=nombre, apellido=apellido, rango=rango, unidad=unidad, fecha_registro=datetime.now())
         session.add(soldado)
         session.commit()
         session.refresh(soldado)

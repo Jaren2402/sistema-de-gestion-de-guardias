@@ -9,12 +9,13 @@ class Soldado(SQLModel, table=True):
     __tablename__ = 'soldado'
 
     # Atributos
-    id_soldado: Optional[int] = Field(default=None, primary_key=True)
-    nombre:   str
-    apellido: str
-    cedula:   str = Field(unique=True)
-    rango:    str
-    unidad:   str
+    id_soldado:     Optional[int] = Field(default=None, primary_key=True)
+    nombre:         str
+    apellido:       str
+    cedula:         str = Field(unique=True)
+    rango:          str
+    unidad:         str
+    fecha_registro: Optional[datetime] = Field(default=None)
 
 # Tabla punto_guardia
 class PuntoGuardia(SQLModel, table=True):

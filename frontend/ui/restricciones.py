@@ -1,53 +1,66 @@
 import asyncio
+import calendar as _cal
+from datetime import date, datetime
 
 import flet as ft
 import httpx
 from config import URL_BACKEND
+from skeleton import hover_row, loading_bar, module_header, no_data, toast
+from skeleton import table_row as sk_row
+from theme import *
 
 
 def build(page: ft.Page):
     """Construye la interfaz de gestión de restricciones: CRUD de períodos no disponibles por soldado."""
     _datos = []
 
-    texto_estado = ft.Text(
-        value="Para registrar una restriccion, primero importe soldados.",
-        color=ft.Colors.GREY_400,
-    )
+    texto_estado = ft.Text()
     selector_soldado = ft.Dropdown(label="Soldado", options=[], width=300)
-    campo_inicio = ft.TextField(label="Fecha inicio (YYYY-MM-DD)")
-    campo_fin = ft.TextField(label="Fecha fin (YYYY-MM-DD)")
-    campo_motivo = ft.TextField(label="Motivo")
+    campo_motivo = ft.TextField(label="Motivo", width=300)
+    txt_fecha_inicio = ft.TextField(label="Fecha inicio", hint_text="YYYY-MM-DD", width=200)
+    txt_fecha_fin = ft.TextField(label="Fecha fin", hint_text="YYYY-MM-DD", width=200)
+    selector_mes = ft.Dropdown(label="Mes", options=[ft.dropdown.Option(str(m)) for m in range(1, 13)], width=100)
+    selector_mes.on_change = lambda e: _filtrar()
+    selector_año = ft.TextField(label="Año", hint_text="2026", width=100, on_change=lambda e: _filtrar())
     _exp = [2, 1, 1, 2, 1]
 
-    body = ft.Column(controls=[], scroll=ft.ScrollMode.ADAPTIVE, expand=True, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
+    def _parse_fecha(valor):
+        try:
+            return datetime.strptime(valor.strip(), "%Y-%m-%d").date()
+        except (ValueError, AttributeError):
+            return None
+
+    barra_loading = loading_bar()
+    body = ft.Column(controls=[sk_row(_exp) for _ in range(5)], scroll=ft.ScrollMode.ADAPTIVE, expand=True, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
 
     header = ft.Container(
         content=ft.Row([
-            ft.Container(ft.Text("SOLDADO", size=16, color="#DEDEDE", weight=ft.FontWeight.BOLD), expand=_exp[0]),
-            ft.Container(ft.Text("INICIO", size=16, color="#DEDEDE", weight=ft.FontWeight.BOLD), expand=_exp[1]),
-            ft.Container(ft.Text("FIN", size=16, color="#DEDEDE", weight=ft.FontWeight.BOLD), expand=_exp[2]),
-            ft.Container(ft.Text("MOTIVO", size=16, color="#DEDEDE", weight=ft.FontWeight.BOLD), expand=_exp[3]),
-            ft.Container(ft.Text("ACCIONES", size=16, color="#DEDEDE", weight=ft.FontWeight.BOLD), expand=_exp[4]),
+            ft.Container(ft.Text("SOLDADO", size=16, color=TEXT_TABLE, weight=ft.FontWeight.BOLD), expand=_exp[0]),
+            ft.Container(ft.Text("INICIO", size=16, color=TEXT_TABLE, weight=ft.FontWeight.BOLD), expand=_exp[1]),
+            ft.Container(ft.Text("FIN", size=16, color=TEXT_TABLE, weight=ft.FontWeight.BOLD), expand=_exp[2]),
+            ft.Container(ft.Text("MOTIVO", size=16, color=TEXT_TABLE, weight=ft.FontWeight.BOLD), expand=_exp[3]),
+            ft.Container(ft.Text("ACCIONES", size=16, color=TEXT_TABLE, weight=ft.FontWeight.BOLD), expand=_exp[4]),
         ]),
-        bgcolor="#25292E",
+        bgcolor=SURFACE_LIGHT,
         padding=ft.Padding(left=16, top=12, right=16, bottom=12),
     )
 
     tabla_container = ft.Container(
         content=ft.Column([header, body]),
         expand=True,
-        bgcolor="#121416",
+        bgcolor=TABLE_BG,
         border_radius=10,
         clip_behavior=ft.ClipBehavior.HARD_EDGE,
     )
 
+    no_data_container = no_data(ft.Icons.BLOCK, "No hay restricciones registradas.")
     cont_tabla = ft.Row([
         ft.Container(expand=1),
         ft.Container(content=tabla_container, expand=6, padding=ft.Padding(left=20, right=20, top=10, bottom=10)),
         ft.Container(expand=1),
-    ], expand=True)
+    ], expand=True, visible=False)
     txt_buscar = ft.TextField(
-        label="Buscar restriccion",
+        label="Buscar restricci\u00f3n",
         hint_text="Nombre del soldado o motivo",
         prefix_icon=ft.Icons.SEARCH,
         width=300,
@@ -56,26 +69,69 @@ def build(page: ft.Page):
 
     def _filtrar():
         q = txt_buscar.value.strip().lower()
-        filtrados = [r for r in _datos
-                     if not q or q in r["nombre"].lower()
-                     or q in r["motivo"].lower()]
+        try:
+            mes = int(selector_mes.value)
+            año = int(selector_año.value.strip())
+            inicio_mes = date(año, mes, 1)
+            fin_mes = date(año, mes, _cal.monthrange(año, mes)[1])
+        except (ValueError, AttributeError, TypeError):
+            inicio_mes = fin_mes = None
+        filtrados = []
+        for r in _datos:
+            if q and q not in r["nombre"].lower() and q not in r["motivo"].lower():
+                continue
+            r_start = _parse_fecha(r["fecha_inicio"])
+            r_end = _parse_fecha(r["fecha_fin"])
+            if inicio_mes and fin_mes and r_start and r_end:
+                if r_end < inicio_mes or r_start > fin_mes:
+                    continue
+            filtrados.append(r)
         body.controls.clear()
         for r in filtrados:
-            body.controls.append(ft.Container(
+            body.controls.append(hover_row(ft.Container(
                 content=ft.Row([
-                    ft.Container(ft.Text(r["nombre"], size=16, color="#DEDEDE"), expand=_exp[0]),
-                    ft.Container(ft.Text(r["fecha_inicio"], size=16, color="#DEDEDE"), expand=_exp[1]),
-                    ft.Container(ft.Text(r["fecha_fin"], size=16, color="#DEDEDE"), expand=_exp[2]),
-                    ft.Container(ft.Text(r["motivo"], size=16, color="#DEDEDE"), expand=_exp[3]),
-                    ft.Container(ft.TextButton("Eliminar", icon=ft.Icons.DELETE, data=r["id"],
-                                                on_click=lambda e, rid=r["id"]: page.run_task(eliminar, rid)),
+                    ft.Container(ft.Text(r["nombre"], size=16, color=TEXT_TABLE), expand=_exp[0]),
+                    ft.Container(ft.Text(r["fecha_inicio"], size=16, color=TEXT_TABLE), expand=_exp[1]),
+                    ft.Container(ft.Text(r["fecha_fin"], size=16, color=TEXT_TABLE), expand=_exp[2]),
+                    ft.Container(ft.Text(r["motivo"], size=16, color=TEXT_TABLE), expand=_exp[3]),
+                    ft.Container(ft.IconButton(icon=ft.Icons.DELETE, icon_size=18,
+                                                on_click=lambda e, rid=r["id"]: _pedir_confirmacion(rid),
+                                                style=ft.ButtonStyle(
+                                                    color={"default": TEXT_SECONDARY, "hovered": ft.Colors.WHITE},
+                                                    bgcolor={"hovered": BTN_DANGER},
+                                                )),
                                  expand=_exp[4]),
                 ]),
-                bgcolor="#171C22",
+                bgcolor=TABLE_ROW,
                 height=40,
                 padding=ft.Padding(left=16, top=0, right=16, bottom=0),
-            ))
+            )))
+        hay = len(filtrados) > 0
+        cont_tabla.visible = hay
+        no_data_container.visible = not hay
         page.update()
+
+    def _pedir_confirmacion(rid):
+        dlg = ft.AlertDialog(
+            title=ft.Text("Eliminar restricci\u00f3n"),
+            content=ft.Text("\u00bfEst\u00e1 seguro de eliminar esta restricci\u00f3n?"),
+            actions=[
+                ft.TextButton("Cancelar", on_click=lambda e: _cerrar_dlg(dlg)),
+                ft.FilledButton("Eliminar", on_click=lambda e: page.run_task(_eliminar_con_confirmacion, dlg, rid)),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        page.show_dialog(dlg)
+        page.update()
+
+    def _cerrar_dlg(dlg):
+        dlg.open = False
+        page.update()
+
+    async def _eliminar_con_confirmacion(dlg, rid):
+        dlg.open = False
+        page.update()
+        await eliminar(rid)
 
     async def cargar_dropdown(max_intentos=3):
         intentos = 0
@@ -92,57 +148,72 @@ def build(page: ft.Page):
                             )
                             for s in datos
                         ]
-                        texto_estado.value = "Lista de soldados cargada."
-                        texto_estado.color = ft.Colors.GREEN
+                        texto_estado.value = ""
                         page.update()
                         return
             except Exception:
                 pass
             intentos += 1
             await asyncio.sleep(1)
-        texto_estado.value = "Para registrar una restriccion, primero importe soldados."
-        texto_estado.color = ft.Colors.GREY_400
-        page.update()
+        toast(page, "No se pudo cargar la lista de soldados.", "warning")
 
     async def cargar_tabla():
         nonlocal _datos
+        barra_loading.visible = True
+        page.update()
+        await asyncio.sleep(0.3)
         try:
             async with httpx.AsyncClient() as cliente:
                 resp = await cliente.get(f"{URL_BACKEND}/restricciones")
+                resp.raise_for_status()
                 _datos = resp.json()
+                if not isinstance(_datos, list):
+                    raise TypeError(f"Respuesta inesperada: {type(_datos).__name__}")
                 _filtrar()
         except Exception as ex:
-            texto_estado.value = f"Error al cargar restricciones: {ex}"
-            texto_estado.color = ft.Colors.RED
+            toast(page, f"Error al cargar restricciones: {ex}", "error")
+            body.controls.clear()
+            body.controls.append(
+                ft.Container(ft.Text(f"Error: {ex}", italic=True, color=TEXT_SECONDARY, size=14),
+                             alignment=ft.Alignment(0, 0), padding=20))
         finally:
+            barra_loading.visible = False
             page.update()
 
     async def crear(e):
         if not selector_soldado.value:
-            texto_estado.value = "Seleccione un soldado."
-            texto_estado.color = ft.Colors.RED
-            page.update()
+            toast(page, "Seleccione un soldado.", "warning")
+            return
+        fi = _parse_fecha(txt_fecha_inicio.value)
+        ff = _parse_fecha(txt_fecha_fin.value)
+        if not fi or not ff:
+            toast(page, "Ingrese fechas en formato YYYY-MM-DD.", "warning")
+            return
+        if fi > ff:
+            toast(page, "La fecha fin debe ser posterior a la fecha inicio.", "warning")
+            return
+        if not campo_motivo.value.strip():
+            toast(page, "Ingrese un motivo.", "warning")
             return
         try:
             async with httpx.AsyncClient() as cliente:
                 resp = await cliente.post(f"{URL_BACKEND}/restricciones", params={
                     "id_soldado": int(selector_soldado.value),
-                    "fecha_inicio": campo_inicio.value,
-                    "fecha_fin": campo_fin.value,
-                    "motivo": campo_motivo.value,
+                    "fecha_inicio": fi.isoformat(),
+                    "fecha_fin": ff.isoformat(),
+                    "motivo": campo_motivo.value.strip(),
                 })
                 datos = resp.json()
                 if "error" in datos:
-                    texto_estado.value = datos['error']
-                    texto_estado.color = ft.Colors.RED
+                    toast(page, datos["error"], "error")
                 else:
-                    texto_estado.value = "Restriccion creada."
-                    texto_estado.color = ft.Colors.GREEN
+                    toast(page, "Restricci\u00f3n creada correctamente.", "success")
                     campo_motivo.value = ""
+                    txt_fecha_inicio.value = ""
+                    txt_fecha_fin.value = ""
                     await cargar_tabla()
         except Exception as ex:
-            texto_estado.value = f"Error: {ex}"
-            texto_estado.color = ft.Colors.RED
+            toast(page, f"Error: {ex}", "error")
         finally:
             page.update()
 
@@ -152,37 +223,36 @@ def build(page: ft.Page):
                 resp = await cliente.delete(f"{URL_BACKEND}/restricciones/{id_restriccion}")
                 datos = resp.json()
                 if "error" in datos:
-                    texto_estado.value = datos['error']
-                    texto_estado.color = ft.Colors.RED
+                    toast(page, datos["error"], "error")
                 else:
-                    texto_estado.value = "Restriccion eliminada."
-                    texto_estado.color = ft.Colors.GREEN
+                    toast(page, "Restricci\u00f3n eliminada.", "success")
                     await cargar_tabla()
         except Exception as ex:
-            texto_estado.value = f"Error: {ex}"
-            texto_estado.color = ft.Colors.RED
+            toast(page, f"Error: {ex}", "error")
         finally:
             page.update()
 
-    boton_crear = ft.Button(
-        "Anadir Restriccion",
+    boton_crear = ft.FilledButton(
+        "A\u00f1adir Restricci\u00f3n",
         on_click=crear,
         icon=ft.Icons.ADD,
     )
-    boton_refrescar = ft.Button(
+    boton_refrescar = ft.FilledButton(
         "Refrescar",
-        on_click=lambda e: page.run_task(cargar_dropdown),
+        on_click=lambda e: page.run_task(cargar_tabla),
         icon=ft.Icons.REFRESH,
     )
 
     panel = ft.Column([
-        ft.Text("Anadir restriccion:", weight=ft.FontWeight.BOLD),
-        texto_estado,
-        ft.Row([selector_soldado, campo_inicio, campo_fin]),
+        barra_loading,
+        module_header("Restricciones", "Control de fechas no disponibles por soldado"),
+        ft.Divider(height=1, color=DIVIDER),
+        ft.Row([selector_soldado, txt_fecha_inicio, txt_fecha_fin]),
         ft.Row([campo_motivo, boton_crear]),
-        ft.Divider(),
-        ft.Row([boton_refrescar, txt_buscar]),
+        ft.Divider(height=1, color=DIVIDER),
+        ft.Row([boton_refrescar, txt_buscar, selector_mes, selector_año]),
         cont_tabla,
+        no_data_container,
     ])
 
     page.run_task(cargar_dropdown)

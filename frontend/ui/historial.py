@@ -1,10 +1,15 @@
+import asyncio
+
 import flet as ft
 import httpx
 from config import URL_BACKEND
+from skeleton import hover_row, loading_bar, module_header, placeholder
+from theme import *
 
 
 def build(page: ft.Page):
     """Construye el historial de sustituciones: registro de todos los cambios realizados."""
+    barra_loading = loading_bar()
     texto_estado = ft.Text()
     selector_mes = ft.Dropdown(
         label="Mes",
@@ -13,7 +18,7 @@ def build(page: ft.Page):
         width=120,
     )
     selector_año = ft.TextField(label="Año", value="2026", width=100)
-    lista_historial = ft.Column()
+    lista_historial = ft.Column(controls=[placeholder(ft.Icons.HISTORY, "Seleccione un mes y presione 'Actualizar'")])
 
     # --- Función para crear tarjetas de auditoría ---
     def _tarjeta_historial(item):
@@ -38,7 +43,7 @@ def build(page: ft.Page):
                 ft.Text(f"Cédula sustituto: {item['cedula_sustituto']}", size=12, color=ft.Colors.GREY_400),
             ])
 
-        return ft.Container(
+        return hover_row(ft.Container(
             content=ft.Row([
                 ft.Container(width=5, bgcolor=borde_color),
                 icono,
@@ -47,13 +52,16 @@ def build(page: ft.Page):
                     cuerpo,
                 ]),
             ]),
-            bgcolor="#1A1E24", border_radius=10, padding=15, margin=8,
-        )
+            bgcolor=SURFACE, border_radius=10, padding=15, margin=8,
+        ))
 
     # --- Función de carga ---
     async def cargar_historial(e=None):
         mes = int(selector_mes.value)
         año = int(selector_año.value)
+        barra_loading.visible = True
+        page.update()
+        await asyncio.sleep(0.3)
         try:
             async with httpx.AsyncClient() as cliente:
                 resp = await cliente.get(f"{URL_BACKEND}/historial-sustituciones/{mes}/{año}")
@@ -68,25 +76,27 @@ def build(page: ft.Page):
                     for item in datos:
                         lista_historial.controls.append(_tarjeta_historial(item))
 
-                texto_estado.value = f"Se encontraron {len(datos)} sustituciones."
-                texto_estado.color = ft.Colors.GREEN
+                texto_estado.value = ""
         except Exception as ex:
             texto_estado.value = f"Error: {ex}"
             texto_estado.color = ft.Colors.RED
         finally:
+            barra_loading.visible = False
             page.update()
 
     # --- Construcción del panel ---
-    boton_actualizar = ft.Button("Actualizar", on_click=cargar_historial, icon=ft.Icons.REFRESH)
+    boton_actualizar = ft.FilledButton("Actualizar", on_click=cargar_historial, icon=ft.Icons.REFRESH)
 
     panel = ft.Column(
         scroll=ft.ScrollMode.AUTO,
         controls=[
-            ft.Text("Historial de Sustituciones", weight=ft.FontWeight.BOLD, size=20),
+            barra_loading,
+            module_header("Historial", "Sustituciones y cambios registrados en el sistema"),
+            ft.Divider(height=1, color=DIVIDER),
             ft.Row([selector_mes, selector_año, boton_actualizar]),
-            ft.Divider(),
+            ft.Divider(height=1, color=DIVIDER),
             texto_estado,
-            ft.Divider(),
+            ft.Divider(height=1, color=DIVIDER),
             lista_historial,
         ]
     )
