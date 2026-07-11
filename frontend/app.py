@@ -259,4 +259,4 @@ async def main(page: ft.Page):
     await mod_soldados["cargar"]()
     await mod_restricciones["cargar_tabla"]()
 
-ft.run(main)
+ft.app(target=main, view=ft.WEB_BROWSER, port=8501, host="0.0.0.0")
