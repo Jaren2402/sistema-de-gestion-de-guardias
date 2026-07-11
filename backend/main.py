@@ -58,6 +58,10 @@ async def log_errores_middleware(request: Request, call_next):
             content={"error": "Error interno del servidor. Consulte los logs para más detalles."}
         )
 
+@app.get("/health")
+def health():
+    return {"status": "ok", "timestamp": datetime.now().isoformat()}
+
 @app.post('/importar_soldados')
 async def importar_soldados(
     archivo: UploadFile = File(...),
@@ -91,6 +95,7 @@ async def importar_soldados(
                 apellido=str(fila["apellido"]),
                 rango=str(fila["rango"]),
                 unidad=str(fila["unidad"]),
+                fecha_registro=datetime.now(),
             )
             session.add(soldado)
             session.flush()
@@ -112,12 +117,13 @@ def obtener_soldados(session: Session = Depends(get_session)):
     resultado = []
     for s in soldados:
         resultado.append({
-            "id_soldado": s.id_soldado,   # ← NUEVO
+            "id_soldado": s.id_soldado,
             "cedula": s.cedula,
             "nombre": s.nombre,
             "apellido": s.apellido,
             "rango": s.rango,
             "unidad": s.unidad,
+            "fecha_registro": s.fecha_registro.isoformat() if s.fecha_registro else None,
         })
     return resultado
 

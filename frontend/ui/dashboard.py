@@ -1,14 +1,10 @@
+import asyncio
+
 import flet as ft
 import httpx
 from config import URL_BACKEND
-
-VERDE = "#4CAF50"
-VERDE_CLARO = "#81C784"
-VERDE_OSCURO = "#2E7D32"
-TEXTO = "#E0E0E0"
-TEXTO_SEC = "#9E9E9E"
-FONDO = "#1A1E24"
-FONDO_BARRA = "#25292E"
+from skeleton import loading_bar, module_header
+from theme import *
 
 
 def build(page: ft.Page):
@@ -30,6 +26,8 @@ def build(page: ft.Page):
         value="1", width=130,
     )
 
+    barra_loading = loading_bar()
+
     # ========================================================
     # KPIs
     # ========================================================
@@ -37,13 +35,13 @@ def build(page: ft.Page):
         return ft.Container(
             content=ft.Column([
                 ft.Row([
-                    ft.Icon(icono, size=22, color=VERDE),
-                    ft.Text("—", size=22, weight=ft.FontWeight.BOLD, color=TEXTO, expand=True,
+                    ft.Icon(icono, size=22, color=PRIMARY),
+                    ft.Text("—", size=22, weight=ft.FontWeight.BOLD, color=TEXT, expand=True,
                             text_align=ft.TextAlign.RIGHT),
                 ]),
-                ft.Text(titulo, size=11, color=TEXTO_SEC),
+                ft.Text(titulo, size=11, color=TEXT_SECONDARY),
             ], spacing=2),
-            bgcolor=FONDO,
+            bgcolor=SURFACE,
             padding=ft.Padding(left=14, top=12, right=14, bottom=12),
             border_radius=10,
             expand=True,
@@ -58,37 +56,37 @@ def build(page: ft.Page):
     # ========================================================
     ring_eq = ft.ProgressRing(
         width=130, height=130, stroke_width=12, value=0.0,
-        color=VERDE, bgcolor=FONDO_BARRA,
+        color=PRIMARY, bgcolor=SURFACE_LIGHT,
     )
-    txt_pct = ft.Text("—", size=28, weight=ft.FontWeight.BOLD, color=TEXTO)
+    txt_pct = ft.Text("—", size=28, weight=ft.FontWeight.BOLD, color=TEXT)
     stack_eq = ft.Stack([
         ring_eq,
         ft.Container(content=txt_pct, alignment=ft.Alignment(0, -0.1), width=130, height=130),
     ])
-    txt_eq_title = ft.Text("\u00cdndice de Equidad", size=14, weight=ft.FontWeight.BOLD, color=TEXTO)
-    txt_eq_max = ft.Text("", size=12, color=TEXTO_SEC)
-    txt_eq_min = ft.Text("", size=12, color=TEXTO_SEC)
-    txt_eq_dif = ft.Text("", size=12, color=VERDE_CLARO)
+    txt_eq_title = ft.Text("\u00cdndice de Equidad", size=14, weight=ft.FontWeight.BOLD, color=TEXT)
+    txt_eq_max = ft.Text("", size=12, color=TEXT_SECONDARY)
+    txt_eq_min = ft.Text("", size=12, color=TEXT_SECONDARY)
+    txt_eq_dif = ft.Text("", size=12, color=PRIMARY_LIGHT)
 
     # ========================================================
     # Contenedores din\u00e1micos
     # ========================================================
     cont_carga = ft.Container(
         content=ft.Column(spacing=3, scroll=ft.ScrollMode.AUTO, height=260),
-        bgcolor=FONDO, border_radius=8, padding=ft.Padding(left=6, top=6, right=6, bottom=6),
+        bgcolor=SURFACE, border_radius=8, padding=ft.Padding(left=6, top=6, right=6, bottom=6),
         expand=True,
     )
-    txt_avg = ft.Text("", size=11, color=TEXTO_SEC)
+    txt_avg = ft.Text("", size=11, color=TEXT_SECONDARY)
 
     cont_rango = ft.Container(
         content=ft.Column(spacing=3),
-        bgcolor=FONDO, border_radius=8, padding=ft.Padding(left=6, top=6, right=6, bottom=6),
+        bgcolor=SURFACE, border_radius=8, padding=ft.Padding(left=6, top=6, right=6, bottom=6),
         expand=True,
     )
 
     cont_suplentes = ft.Container(
         content=ft.Column(spacing=3),
-        bgcolor=FONDO, border_radius=8, padding=ft.Padding(left=6, top=6, right=6, bottom=6),
+        bgcolor=SURFACE, border_radius=8, padding=ft.Padding(left=6, top=6, right=6, bottom=6),
         expand=True,
     )
 
@@ -97,7 +95,7 @@ def build(page: ft.Page):
     # ========================================================
     def _col_rank(titulo):
         return ft.Column([
-            ft.Text(titulo, size=11, weight=ft.FontWeight.BOLD, color=VERDE),
+            ft.Text(titulo, size=11, weight=ft.FontWeight.BOLD, color=PRIMARY),
             ft.Column(spacing=2, scroll=ft.ScrollMode.AUTO, height=170),
         ], expand=True, spacing=4)
 
@@ -115,23 +113,23 @@ def build(page: ft.Page):
     # ========================================================
     # Helpers
     # ========================================================
-    def _barra(label, value, max_val, color=VERDE):
+    def _barra(label, value, max_val, color=PRIMARY):
         ratio = value / max_val if max_val > 0 else 0
         r_int = int(ratio * 100)
         if r_int < 1 and ratio > 0:
             r_int = 1
         return ft.Container(
             content=ft.Row([
-                ft.Container(ft.Text(label, size=11, color=TEXTO, no_wrap=True), width=90),
+                ft.Container(ft.Text(label, size=11, color=TEXT, no_wrap=True), width=90),
                 ft.Stack([
-                    ft.Container(expand=True, height=14, bgcolor=FONDO_BARRA, border_radius=3),
+                    ft.Container(expand=True, height=14, bgcolor=SURFACE_LIGHT, border_radius=3),
                     ft.Row([
                         ft.Container(height=14, bgcolor=color, border_radius=3, expand=r_int),
                         ft.Container(height=14, expand=max(100 - r_int, 1)),
                     ], spacing=0),
                 ], expand=True),
                 ft.Container(
-                    ft.Text(str(value), size=11, color=TEXTO, text_align=ft.TextAlign.RIGHT),
+                    ft.Text(str(value), size=11, color=TEXT, text_align=ft.TextAlign.RIGHT),
                     width=26,
                 ),
             ], spacing=6, vertical_alignment=ft.CrossAxisAlignment.CENTER),
@@ -142,11 +140,11 @@ def build(page: ft.Page):
         return ft.Container(
             content=ft.Row([
                 ft.Text(f"{idx+1}\u00ba", size=9, weight=ft.FontWeight.BOLD,
-                        color=TEXTO_SEC, width=20),
-                ft.Text(s["nombre"], size=11, color=TEXTO, expand=True),
-                ft.Text(f"{s['rango']}", size=9, color=TEXTO_SEC),
+                        color=TEXT_SECONDARY, width=20),
+                ft.Text(s["nombre"], size=11, color=TEXT, expand=True),
+                ft.Text(f"{s['rango']}", size=9, color=TEXT_SECONDARY),
             ], spacing=4),
-            bgcolor=FONDO,
+            bgcolor=SURFACE,
             padding=ft.Padding(left=6, top=3, right=6, bottom=3),
             border_radius=5,
         )
@@ -154,20 +152,20 @@ def build(page: ft.Page):
     def _tarjeta(titulo, subtitulo):
         return ft.Container(
             content=ft.Row([
-                ft.Container(width=3, bgcolor=VERDE, border_radius=2),
+                ft.Container(width=3, bgcolor=PRIMARY, border_radius=2),
                 ft.Column([
-                    ft.Text(titulo, size=11, weight=ft.FontWeight.BOLD, color=TEXTO),
-                    ft.Text(subtitulo, size=9, color=TEXTO_SEC),
+                    ft.Text(titulo, size=11, weight=ft.FontWeight.BOLD, color=TEXT),
+                    ft.Text(subtitulo, size=9, color=TEXT_SECONDARY),
                 ], spacing=0, expand=True),
             ], spacing=6),
-            bgcolor=FONDO,
+            bgcolor=SURFACE,
             padding=ft.Padding(left=0, top=4, right=8, bottom=4),
             border_radius=6,
         )
 
     def _placeholder(mensaje="Sin datos para este mes."):
         return ft.Container(
-            content=ft.Text(mensaje, italic=True, color=TEXTO_SEC, size=12),
+            content=ft.Text(mensaje, italic=True, color=TEXT_SECONDARY, size=12),
             padding=ft.Padding(top=20, bottom=20, left=0, right=0),
             alignment=ft.Alignment(0, 0),
             expand=True,
@@ -181,6 +179,9 @@ def build(page: ft.Page):
         a = int(sel_ano.value)
         n = int(sel_periodo.value)
 
+        barra_loading.visible = True
+        page.update()
+        await asyncio.sleep(0.3)
         try:
             async with httpx.AsyncClient() as cl:
                 r = await cl.get(f"{URL_BACKEND}/estadisticas/{m}/{a}?meses={n}")
@@ -195,7 +196,7 @@ def build(page: ft.Page):
                 eq = d.get("equidad", {})
                 pct = eq.get("porcentaje", 0)
                 ring_eq.value = pct / 100
-                ring_eq.color = VERDE if pct >= 80 else VERDE_OSCURO if pct >= 60 else "#F44336"
+                ring_eq.color = PRIMARY if pct >= 80 else PRIMARY_DARK if pct >= 60 else ERROR
                 txt_pct.value = f"{pct:.0f}%" if total_g > 0 else "—"
 
                 periodo = d.get("periodo", {})
@@ -233,7 +234,7 @@ def build(page: ft.Page):
                     prom = sum(vals) / len(vals)
                     txt_avg.value = f"Media: {prom:.1f}  \u2022  {len(todos)} soldados"
                     for s in sorted(todos, key=lambda x: x["total_guardias"], reverse=True):
-                        color = VERDE_CLARO if s["total_guardias"] <= prom else VERDE_OSCURO
+                        color = PRIMARY_LIGHT if s["total_guardias"] <= prom else PRIMARY_DARK
                         col_c.controls.append(_barra(s["nombre"], s["total_guardias"], mx, color))
 
                 # --- Guardias por Rango ---
@@ -249,7 +250,7 @@ def build(page: ft.Page):
                     orden = sorted(agrupados.items(), key=lambda x: x[1], reverse=True)
                     mx_r = orden[0][1]
                     for rk, rv in orden:
-                        col_r.controls.append(_barra(rk, rv, mx_r, VERDE))
+                        col_r.controls.append(_barra(rk, rv, mx_r, PRIMARY))
 
                 # --- Top Suplentes ---
                 col_sp = cont_suplentes.content
@@ -261,7 +262,7 @@ def build(page: ft.Page):
                     from collections import Counter
                     conteo = Counter(s["soldado"] for s in sustituciones)
                     for nom, cnt in conteo.most_common(6):
-                        col_sp.controls.append(_barra(nom, cnt, conteo.most_common(1)[0][1], VERDE_CLARO))
+                        col_sp.controls.append(_barra(nom, cnt, conteo.most_common(1)[0][1], PRIMARY_LIGHT))
 
                 # --- Rankings ---
                 def _llenar(col, lista):
@@ -269,7 +270,7 @@ def build(page: ft.Page):
                     if not lista:
                         col.controls[1].controls.append(
                             ft.Container(
-                                ft.Text("—", color=TEXTO_SEC, size=10),
+                                ft.Text("—", color=TEXT_SECONDARY, size=10),
                                 padding=5,
                             )
                         )
@@ -286,7 +287,7 @@ def build(page: ft.Page):
                 def _cargar(ctrl, datos, fmt):
                     ctrl.controls.clear()
                     if not datos:
-                        ctrl.controls.append(ft.Text("Sin registros.", italic=True, color=TEXTO_SEC, size=11))
+                        ctrl.controls.append(ft.Text("Sin registros.", italic=True, color=TEXT_SECONDARY, size=11))
                     else:
                         for item in datos:
                             ctrl.controls.append(_tarjeta(item["soldado"], fmt(item)))
@@ -305,16 +306,17 @@ def build(page: ft.Page):
             for col in [col_mg, col_mg2, col_mp, col_mn]:
                 col.controls[1].controls.clear()
                 col.controls[1].controls.append(
-                    ft.Container(ft.Text("—", color=TEXTO_SEC, size=10), padding=5))
+                    ft.Container(ft.Text("—", color=TEXT_SECONDARY, size=10), padding=5))
         except Exception as ex:
             for c in [cont_carga.content, cont_rango.content, cont_suplentes.content,
                       lista_sust, lista_restr]:
                 c.controls.clear()
                 c.controls.append(_placeholder(f"Error: {ex}"))
         finally:
+            barra_loading.visible = False
             page.update()
 
-    btn = ft.Button("Actualizar Dashboard", on_click=cargar, icon=ft.Icons.REFRESH)
+    btn = ft.FilledButton("Actualizar Dashboard", on_click=cargar, icon=ft.Icons.REFRESH)
 
     # ========================================================
     # Panel
@@ -323,10 +325,13 @@ def build(page: ft.Page):
         scroll=ft.ScrollMode.AUTO,
         spacing=14,
         controls=[
+            barra_loading,
+            module_header("Dashboard", "Resumen general de métricas y equidad del período"),
+            ft.Divider(height=1, color=DIVIDER),
             ft.Row([sel_mes, sel_ano, sel_periodo, btn]),
-            ft.Divider(height=1, color="#2A2F35"),
+            ft.Divider(height=1, color=DIVIDER),
             ft.Row([kpi_total, kpi_sust, kpi_restr], spacing=8),
-            ft.Divider(height=1, color="#2A2F35"),
+            ft.Divider(height=1, color=DIVIDER),
 
             # Equidad
             ft.Row([
@@ -339,39 +344,39 @@ def build(page: ft.Page):
                     txt_eq_dif,
                 ], spacing=3, alignment=ft.MainAxisAlignment.CENTER, expand=True),
             ], vertical_alignment=ft.CrossAxisAlignment.CENTER),
-            ft.Divider(height=1, color="#2A2F35"),
+            ft.Divider(height=1, color=DIVIDER),
 
             # Carga
             ft.Row([
-                ft.Text("Carga Individual", size=14, weight=ft.FontWeight.BOLD, color=TEXTO),
+                ft.Text("Carga Individual", size=14, weight=ft.FontWeight.BOLD, color=TEXT),
                 ft.Container(expand=True),
                 txt_avg,
             ]),
             cont_carga,
-            ft.Divider(height=1, color="#2A2F35"),
+            ft.Divider(height=1, color=DIVIDER),
 
             # Rango
-            ft.Text("Guardias por Rango", size=14, weight=ft.FontWeight.BOLD, color=TEXTO),
+            ft.Text("Guardias por Rango", size=14, weight=ft.FontWeight.BOLD, color=TEXT),
             cont_rango,
-            ft.Divider(height=1, color="#2A2F35"),
+            ft.Divider(height=1, color=DIVIDER),
 
             # Suplentes
-            ft.Text("Top Suplentes", size=14, weight=ft.FontWeight.BOLD, color=TEXTO),
+            ft.Text("Top Suplentes", size=14, weight=ft.FontWeight.BOLD, color=TEXT),
             cont_suplentes,
-            ft.Divider(height=1, color="#2A2F35"),
+            ft.Divider(height=1, color=DIVIDER),
 
             # Rankings
-            ft.Text("Rankings", size=15, weight=ft.FontWeight.BOLD, color=TEXTO),
+            ft.Text("Rankings", size=15, weight=ft.FontWeight.BOLD, color=TEXT),
             ft.Row([col_mg, col_mg2, col_mp, col_mn], spacing=10,
                    vertical_alignment=ft.CrossAxisAlignment.START),
-            ft.Divider(height=1, color="#2A2F35"),
+            ft.Divider(height=1, color=DIVIDER),
 
             ft.ExpansionTile(
-                title=ft.Text("Sustituciones", size=13, weight=ft.FontWeight.BOLD, color=TEXTO),
+                title=ft.Text("Sustituciones", size=13, weight=ft.FontWeight.BOLD, color=TEXT),
                 controls=[lista_sust],
             ),
             ft.ExpansionTile(
-                title=ft.Text("Restricciones", size=13, weight=ft.FontWeight.BOLD, color=TEXTO),
+                title=ft.Text("Restricciones", size=13, weight=ft.FontWeight.BOLD, color=TEXT),
                 controls=[lista_restr],
             ),
         ],

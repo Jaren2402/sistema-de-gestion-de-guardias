@@ -1,0 +1,11 @@
+venv/
+__pycache__/
+*.pyc
+.env
+.git/
+.gitignore
+README.md
+CONTRIBUTING.md
+FrontendGuardias.spec
+BackendGuardias.spec
+.vscode/
