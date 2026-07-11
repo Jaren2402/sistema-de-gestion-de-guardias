@@ -9,4 +9,4 @@ COPY . .
 
 EXPOSE 8501
 
-CMD ["flet", "run", "--web", "--port", "8501", "app.py"]
+CMD ["python", "app.py"]
