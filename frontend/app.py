@@ -1,4 +1,5 @@
 import asyncio
+import os
 
 import flet as ft
 from theme import *
@@ -259,4 +260,5 @@ async def main(page: ft.Page):
     await mod_soldados["cargar"]()
     await mod_restricciones["cargar_tabla"]()
 
-ft.app(target=main, view=ft.AppView.WEB_BROWSER, port=8501, host="0.0.0.0")
+_port = int(os.environ.get("PORT", "8501"))
+ft.app(target=main, view=ft.AppView.WEB_BROWSER, port=_port, host="0.0.0.0")
