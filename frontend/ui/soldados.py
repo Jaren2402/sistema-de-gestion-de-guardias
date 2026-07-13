@@ -1,5 +1,6 @@
 import asyncio
 import datetime as dt
+import os
 
 import flet as ft
 import httpx
@@ -167,6 +168,13 @@ def build(page: ft.Page, on_soldados_actualizados=None, on_ver_ficha=None):
                     ft.FilePickerUploadFile(name=archivo.name, upload_url=upload_url, method="PUT")
                 ])
                 archivo.path = f"{UPLOAD_DIR}/{archivo.name}"
+                texto_estado.value = "Subiendo archivo..."
+                page.update()
+                for _ in range(50):
+                    if os.path.exists(archivo.path):
+                        break
+                    await asyncio.sleep(0.2)
+                texto_estado.value = ""
             with open(archivo.path, "rb") as f:
                 contenido = f.read()
             async with httpx.AsyncClient() as cliente:
@@ -205,6 +213,7 @@ def build(page: ft.Page, on_soldados_actualizados=None, on_ver_ficha=None):
         barra_loading,
         module_header("Soldados", "Gesti\u00f3n y sincronizaci\u00f3n del personal militar"),
         ft.Divider(height=1, color=DIVIDER),
+        texto_estado,
         ft.Row([boton_importar, boton_refrescar]),
         ft.Divider(height=1, color=DIVIDER),
         ft.Row([txt_buscar, txt_fecha_desde, txt_fecha_hasta, lbl_contador]),
