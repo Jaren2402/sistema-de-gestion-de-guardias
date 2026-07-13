@@ -74,6 +74,7 @@ async def main(page: ft.Page):
     page.theme_mode = ft.ThemeMode.DARK
     page.bgcolor = BG
     page.padding = 0
+    page.upload_dir = "/tmp"
 
     async def _construir_app():
         try:
