@@ -3,7 +3,7 @@ import traceback
 
 import flet as ft
 import httpx
-from config import URL_BACKEND
+from config import UPLOAD_DIR, URL_BACKEND
 from theme import *
 from ui.calendario import build as build_calendario
 from ui.dashboard import build as build_dashboard
@@ -333,4 +333,6 @@ async def main(page: ft.Page):
     await _construir_app()
 
 if __name__ == "__main__":
-    ft.run(main, view=ft.AppView.WEB_BROWSER, port=8501, host="0.0.0.0")
+    import os
+    os.environ.setdefault("FLET_SECRET_KEY", "mi-clave-secreta-local-123")
+    ft.run(main, view=ft.AppView.WEB_BROWSER, port=8501, host="0.0.0.0", upload_dir=UPLOAD_DIR)
