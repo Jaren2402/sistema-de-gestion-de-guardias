@@ -43,10 +43,7 @@ def _log_error(contexto: str, ex: Exception):
     traceback.print_exc()
 
 
-def _calcular_puntos_mes(mes: int, año: int, session: Session) -> dict:
-    """Calcula puntos acumulados por soldado en un mes completo.
-    Solo considera asignaciones titulares no anuladas.
-    Devuelve {id_soldado: puntos_totales}."""
+def _calcular_puntos_mes(mes: int, año: int, usuario_id: int, session: Session) -> dict:
     if mes < 1 or mes > 12:
         return {}
     inicio = datetime(año, mes, 1)
@@ -60,7 +57,8 @@ def _calcular_puntos_mes(mes: int, año: int, session: Session) -> dict:
             Guardia.fecha_inicio >= inicio,
             Guardia.fecha_inicio < proximo_mes,
             Asignacion.es_titular,
-            ~Asignacion.es_anulada
+            ~Asignacion.es_anulada,
+            Soldado.id_usuario == usuario_id,
         )
     )
     resultados = session.exec(query).all()
@@ -77,18 +75,13 @@ def _calcular_puntos_mes(mes: int, año: int, session: Session) -> dict:
     return puntos
 
 
-def generar_calendario(mes: int, año: int, session: Session) -> dict:
-    """
-    Genera el calendario de guardias para un mes completo.
-    Limpia el mes anterior, crea turnos para cada punto de guardia,
-    respetando 48 horas de descanso, restricciones y asignando con equidad.
-    """
+def generar_calendario(mes: int, año: int, usuario_id: int, session: Session) -> dict:
     try:
-        soldados = session.exec(select(Soldado)).all()
+        soldados = session.exec(select(Soldado).where(Soldado.id_usuario == usuario_id)).all()
         if not soldados:
             return {"error": "No hay soldados registrados."}
 
-        puntos = session.exec(select(PuntoGuardia)).all()
+        puntos = session.exec(select(PuntoGuardia).where(PuntoGuardia.id_usuario == usuario_id)).all()
         if not puntos:
             return {"error": "No hay puntos de guardia definidos."}
 
@@ -118,7 +111,7 @@ def generar_calendario(mes: int, año: int, session: Session) -> dict:
         else:
             mes_puntos = mes - 1
             año_puntos = año
-        puntos_arrastre = _calcular_puntos_mes(mes_puntos, año_puntos, session)
+        puntos_arrastre = _calcular_puntos_mes(mes_puntos, año_puntos, usuario_id, session)
 
         if mes == 1:
             mes_anterior = 12
@@ -248,11 +241,7 @@ def generar_calendario(mes: int, año: int, session: Session) -> dict:
         _log_error("generar_calendario", ex)
         return {"error": f"Error al generar calendario: {ex}"}
 
-def obtener_calendario(mes: int, año: int, session: Session) -> dict:
-    """
-    Devuelve el calendario de guardias generado para un mes,
-    organizado como lista plana con todos los detalles del soldado.
-    """
+def obtener_calendario(mes: int, año: int, usuario_id: int, session: Session) -> dict:
     try:
         inicio = datetime(año, mes, 1)
         if mes == 12:
@@ -268,7 +257,8 @@ def obtener_calendario(mes: int, año: int, session: Session) -> dict:
             .where(
                 Guardia.fecha_inicio >= inicio,
                 Guardia.fecha_inicio < proximo_mes,
-                Asignacion.es_titular
+                Asignacion.es_titular,
+                Soldado.id_usuario == usuario_id
             )
             .order_by(Guardia.fecha_inicio, PuntoGuardia.nombre)
         )
@@ -293,8 +283,7 @@ def obtener_calendario(mes: int, año: int, session: Session) -> dict:
         _log_error("obtener_calendario", ex)
         return {"error": f"Error al obtener calendario: {ex}"}
 
-def buscar_candidatos_sustitucion(id_asignacion_original: int, session: Session) -> dict:
-    """Busca los mejores candidatos para sustituir a un soldado, incluyendo intercambios directos."""
+def buscar_candidatos_sustitucion(id_asignacion_original: int, usuario_id: int, session: Session) -> dict:
     try:
         asignacion_original = session.get(Asignacion, id_asignacion_original)
         if not asignacion_original:
@@ -304,7 +293,7 @@ def buscar_candidatos_sustitucion(id_asignacion_original: int, session: Session)
         if not guardia_original:
             return {"error": "Guardia no encontrada."}
 
-        soldados = session.exec(select(Soldado)).all()
+        soldados = session.exec(select(Soldado).where(Soldado.id_usuario == usuario_id)).all()
         fecha_guardia = guardia_original.fecha_inicio
 
         restricciones = session.exec(
@@ -571,10 +560,9 @@ def obtener_ficha_soldado(id_soldado: int, mes: int, año: int, session: Session
         _log_error("obtener_ficha_soldado", ex)
         return {"error": f"Error al obtener ficha del soldado: {ex}"}
 
-def crear_soldado(cedula: str, nombre: str, apellido: str, rango: str, unidad: str, session: Session) -> dict:
-    """Crea un nuevo soldado y lo guarda en la base de datos."""
+def crear_soldado(cedula: str, nombre: str, apellido: str, rango: str, unidad: str, usuario_id: int, session: Session) -> dict:
     try:
-        soldado = Soldado(cedula=cedula, nombre=nombre, apellido=apellido, rango=rango, unidad=unidad, fecha_registro=datetime.now())
+        soldado = Soldado(cedula=cedula, nombre=nombre, apellido=apellido, rango=rango, unidad=unidad, fecha_registro=datetime.now(), id_usuario=usuario_id)
         session.add(soldado)
         session.commit()
         session.refresh(soldado)
@@ -611,9 +599,9 @@ def eliminar_soldado(id_soldado: int, session: Session) -> dict:
     session.commit()
     return {"mensaje": "Soldado eliminado correctamente."}
 
-def crear_punto(nombre: str, descripcion: str, session: Session) -> dict:
+def crear_punto(nombre: str, descripcion: str, usuario_id: int, session: Session) -> dict:
     try:
-        punto = PuntoGuardia(nombre=nombre, descripcion=descripcion)
+        punto = PuntoGuardia(nombre=nombre, descripcion=descripcion, id_usuario=usuario_id)
         session.add(punto)
         session.commit()
         session.refresh(punto)
@@ -645,14 +633,14 @@ def eliminar_punto(id_punto: int, session: Session) -> dict:
     session.commit()
     return {"mensaje": "Punto eliminado correctamente."}
 
-def listar_puntos(session: Session):
-    puntos = session.exec(select(PuntoGuardia).order_by(PuntoGuardia.nombre)).all()
+def listar_puntos(usuario_id: int, session: Session):
+    puntos = session.exec(select(PuntoGuardia).where(PuntoGuardia.id_usuario == usuario_id).order_by(PuntoGuardia.nombre)).all()
     return [
         {"id": p.id_punto, "nombre": p.nombre, "descripcion": p.descripcion or ""}
         for p in puntos
     ]
 
-def generar_pdf(mes: int, año: int, session: Session) -> BytesIO:
+def generar_pdf(mes: int, año: int, usuario_id: int, session: Session) -> BytesIO:
     """
     Genera un PDF del calendario de guardias de un mes.
     Formato vertical (A4). Una tabla por página, centrada y compacta.
@@ -698,6 +686,7 @@ def generar_pdf(mes: int, año: int, session: Session) -> BytesIO:
             Guardia.fecha_inicio < proximo_mes,
             Asignacion.es_titular,
             ~Asignacion.es_anulada,
+            Soldado.id_usuario == usuario_id,
         )
         .order_by(PuntoGuardia.nombre, Guardia.fecha_inicio, Guardia.tipo)
     )
@@ -818,8 +807,7 @@ def crear_novedad(id_asignacion: int, descripcion: str, session: Session) -> dic
     }
 
 
-def listar_novedades(mes: int, año: int, session: Session) -> list:
-    """Devuelve todas las novedades de un mes, con datos de la guardia y el soldado."""
+def listar_novedades(mes: int, año: int, usuario_id: int, session: Session) -> list:
     inicio = datetime(año, mes, 1)
     if mes == 12:
         proximo_mes = datetime(año + 1, 1, 1)
@@ -836,6 +824,7 @@ def listar_novedades(mes: int, año: int, session: Session) -> list:
             Guardia.fecha_inicio >= inicio,
             Guardia.fecha_inicio < proximo_mes,
             ~Asignacion.es_anulada,
+            Soldado.id_usuario == usuario_id,
         )
         .order_by(Guardia.fecha_inicio.desc())
     )
@@ -856,7 +845,7 @@ def listar_novedades(mes: int, año: int, session: Session) -> list:
         })
     return novedades
 
-def obtener_estadisticas(mes: int, año: int, session: Session, meses: int = 1) -> dict:
+def obtener_estadisticas(mes: int, año: int, usuario_id: int, session: Session, meses: int = 1) -> dict:
     """Devuelve estadísticas del período: KPIs, equidad, rankings y detalles.
     meses=1 → solo el mes indicado. meses=6 → acumulado de los últimos 6 meses."""
     # Calcular rango del período
@@ -881,7 +870,8 @@ def obtener_estadisticas(mes: int, año: int, session: Session, meses: int = 1) 
             Guardia.fecha_inicio >= inicio,
             Guardia.fecha_inicio < proximo_mes,
             Asignacion.es_titular,
-            ~Asignacion.es_anulada
+            ~Asignacion.es_anulada,
+            Soldado.id_usuario == usuario_id,
         )
     )
     titulares = session.exec(query_titulares).all()
@@ -905,7 +895,8 @@ def obtener_estadisticas(mes: int, año: int, session: Session, meses: int = 1) 
         .join(Soldado, Restriccion.id_soldado == Soldado.id_soldado)
         .where(
             Restriccion.fecha_inicio <= (proximo_mes - timedelta(days=1)).date(),
-            Restriccion.fecha_fin >= inicio.date()
+            Restriccion.fecha_fin >= inicio.date(),
+            Soldado.id_usuario == usuario_id,
         )
     ).all()
 
@@ -986,6 +977,43 @@ def obtener_estadisticas(mes: int, año: int, session: Session, meses: int = 1) 
             "motivo": rest.motivo,
         })
 
+    # --- Evolución mensual de equidad ---
+    evolucion_equidad = []
+    month_names = ["", "Ene", "Feb", "Mar", "Abr", "May", "Jun",
+                   "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+    for m in range(mes_inicio, mes + 1):
+        if m == 12:
+            m_end = datetime(año + 1, 1, 1)
+        else:
+            m_end = datetime(año, m + 1, 1)
+        m_start = datetime(año, m, 1)
+        m_titulares = [(s, a, g) for s, a, g in titulares
+                       if m_start <= g.fecha_inicio < m_end]
+        m_pts = {}
+        for s, _, g in m_titulares:
+            sid = s.id_soldado
+            factor = FACTOR_TURNO.get(g.tipo, 1.0)
+            if g.fecha_inicio.weekday() in (5, 6):
+                factor *= FACTOR_FIN_SEMANA
+            m_pts[sid] = m_pts.get(sid, 0) + factor
+        pts_list = list(m_pts.values())
+        if pts_list:
+            mx_m = max(pts_list)
+            mn_m = min(pts_list)
+            m_pct = max(0, 1 - ((mx_m - mn_m) / mx_m)) * 100 if mx_m > 0 else 100
+        else:
+            m_pct = 0
+        evolucion_equidad.append({
+            "mes": month_names[m],
+            "porcentaje": round(m_pct, 1),
+        })
+
+    # --- Sobrecargado: soldado con más puntos ---
+    sobrecargado = max(lista_soldados, key=lambda x: x["total_puntos"]) if lista_soldados else {}
+
+    # --- Tasa de sustitución ---
+    tasa_sustitucion = round(total_sustituciones / total_guardias * 100, 1) if total_guardias > 0 else 0
+
     return {
         "periodo": {
             "meses": meses,
@@ -997,12 +1025,18 @@ def obtener_estadisticas(mes: int, año: int, session: Session, meses: int = 1) 
             "total_guardias": total_guardias,
             "total_sustituciones": total_sustituciones,
             "total_restricciones": total_restricciones,
+            "tasa_sustitucion": tasa_sustitucion,
         },
         "equidad": {
             "porcentaje": round(equidad_pct, 1),
             "diferencia_max_min": round(dif, 1),
             "max_puntos": round(max_puntos, 1),
         },
+        "evolucion_equidad": evolucion_equidad,
+        "sobrecargado": {
+            "nombre": sobrecargado.get("nombre", ""),
+            "total_puntos": sobrecargado.get("total_puntos", 0),
+        } if sobrecargado else {},
         "tops": {
             "mas_guardias": mas_guardias,
             "menos_guardias": menos_guardias,
@@ -1017,7 +1051,6 @@ def obtener_estadisticas(mes: int, año: int, session: Session, meses: int = 1) 
     }
 
 def obtener_historial_sustituciones(mes: int, año: int, session: Session) -> list:
-    """Devuelve el historial de sustituciones de un mes, con trueques enriquecidos."""
     inicio = datetime(año, mes, 1)
     if mes == 12:
         proximo_mes = datetime(año + 1, 1, 1)
@@ -1092,10 +1125,8 @@ def obtener_historial_sustituciones(mes: int, año: int, session: Session) -> li
 
     return historial
 
-async def difundir_pdf(mes: int, año: int, session: Session) -> dict:
-    """Genera el PDF del mes y lo envía directamente a Telegram desde memoria."""
-    # 1. Generar el PDF en memoria
-    pdf_buffer = generar_pdf(mes, año, session)
+async def difundir_pdf(mes: int, año: int, usuario_id: int, session: Session) -> dict:
+    pdf_buffer = generar_pdf(mes, año, usuario_id, session)
     pdf_bytes = pdf_buffer.getvalue()
     print(f"✅ PDF generado en memoria: {len(pdf_bytes)} bytes")
 

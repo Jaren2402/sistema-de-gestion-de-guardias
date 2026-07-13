@@ -2,6 +2,7 @@ import asyncio
 
 import flet as ft
 import httpx
+from api import get_token
 from config import URL_BACKEND
 from skeleton import hover_row, loading_bar, module_header, no_data
 from skeleton import table_row as sk_row
@@ -105,7 +106,8 @@ def build(page: ft.Page):
         await asyncio.sleep(0.3)
         try:
             async with httpx.AsyncClient() as cliente:
-                resp = await cliente.get(f"{URL_BACKEND}/soldados")
+                token = get_token(page)
+                resp = await cliente.get(f"{URL_BACKEND}/soldados", params={"token": token})
                 _datos = resp.json()
                 _filtrar()
                 texto_estado.value = ""
@@ -158,15 +160,16 @@ def build(page: ft.Page):
 
         try:
             async with httpx.AsyncClient() as cliente:
+                token = get_token(page)
                 if id_edicion.value:
                     resp = await cliente.put(
                         f"{URL_BACKEND}/soldados/editar/{id_edicion.value}",
-                        params=datos,
+                        params={**datos, "token": token},
                     )
                 else:
                     resp = await cliente.post(
                         f"{URL_BACKEND}/soldados/crear",
-                        params=datos,
+                        params={**datos, "token": token},
                     )
                 resultado = resp.json()
                 if "error" in resultado:
@@ -186,7 +189,8 @@ def build(page: ft.Page):
         id_soldado = e.control.data
         try:
             async with httpx.AsyncClient() as cliente:
-                resp = await cliente.delete(f"{URL_BACKEND}/soldados/eliminar/{id_soldado}")
+                token = get_token(page)
+                resp = await cliente.delete(f"{URL_BACKEND}/soldados/eliminar/{id_soldado}", params={"token": token})
                 resultado = resp.json()
                 if "error" in resultado:
                     texto_estado.value = f"{resultado['error']}"
@@ -217,8 +221,6 @@ def build(page: ft.Page):
         cont_tabla,
         no_data_container,
     ])
-
-    page.run_task(cargar_tabla)
 
     return {"panel": panel,
             "cargar_tabla": cargar_tabla,}

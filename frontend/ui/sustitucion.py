@@ -2,6 +2,7 @@ import asyncio
 
 import flet as ft
 import httpx
+from api import get_token
 from config import URL_BACKEND
 from skeleton import loading_bar, module_header, placeholder
 from theme import *
@@ -28,9 +29,10 @@ def build(page: ft.Page, on_sustitucion_completada=None):
         await asyncio.sleep(0.3)
         try:
             async with httpx.AsyncClient() as cliente:
+                token = get_token(page)
                 resp = await cliente.post(
                     f"{URL_BACKEND}/sustituir-guardia",
-                    params={"id_asignacion_original": int(id_asig)}
+                    params={"id_asignacion_original": int(id_asig), "token": token}
                 )
                 datos = resp.json()
                 zona_resultados.controls.clear()
@@ -97,12 +99,14 @@ def build(page: ft.Page, on_sustitucion_completada=None):
         await asyncio.sleep(0.3)
         try:
             async with httpx.AsyncClient() as cliente:
+                token = get_token(page)
                 resp = await cliente.post(
                     f"{URL_BACKEND}/confirmar-trueque",
                     params={
                         "id_asignacion_a": id_asig,
                         "id_asignacion_b": id_asignacion_b,
-                        "id_soldado_b": id_soldado_b
+                        "id_soldado_b": id_soldado_b,
+                        "token": token
                     }
                 )
                 datos = resp.json()
@@ -129,11 +133,13 @@ def build(page: ft.Page, on_sustitucion_completada=None):
         await asyncio.sleep(0.3)
         try:
             async with httpx.AsyncClient() as cliente:
+                token = get_token(page)
                 resp = await cliente.post(
                     f"{URL_BACKEND}/confirmar-sustitucion",
                     params={
                         "id_asignacion_original": id_asig,
-                        "id_nuevo_soldado": id_soldado
+                        "id_nuevo_soldado": id_soldado,
+                        "token": token
                     }
                 )
                 datos = resp.json()
