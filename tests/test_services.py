@@ -14,7 +14,7 @@ def test_generar_calendario_sin_soldados():
     SQLModel.metadata.create_all(engine)
 
     with Session(engine) as session:
-        session.exec(text("INSERT INTO usuario (username, password_hash, rol) VALUES ('test', 'x', 'admin')"))
+        session.exec(text("INSERT INTO usuario (username, password_hash, rol, created_at) VALUES ('test', 'x', 'admin', '2026-01-01 00:00:00')"))
         session.commit()
         resultado = generar_calendario(5, 2026, 1, session)
 
@@ -28,7 +28,7 @@ def test_generar_calendario_sin_puntos():
     SQLModel.metadata.create_all(engine)
 
     with Session(engine) as session:
-        session.exec(text("INSERT INTO usuario (username, password_hash, rol) VALUES ('test', 'x', 'admin')"))
+        session.exec(text("INSERT INTO usuario (username, password_hash, rol, created_at) VALUES ('test', 'x', 'admin', '2026-01-01 00:00:00')"))
         # Insertar soldado con SQL textual (evita importar modelos)
         session.exec(
             text("INSERT INTO soldado (cedula, nombre, apellido, rango, unidad, id_usuario) VALUES ('V123', 'Prueba', 'Soldado', 'cabo segundo', 'Infantería', 1)")
@@ -46,7 +46,7 @@ def test_flujo_completo_sustitucion_simple():
     SQLModel.metadata.create_all(engine)
 
     with Session(engine) as session:
-        session.exec(text("INSERT INTO usuario (username, password_hash, rol) VALUES ('test', 'x', 'admin')"))
+        session.exec(text("INSERT INTO usuario (username, password_hash, rol, created_at) VALUES ('test', 'x', 'admin', '2026-01-01 00:00:00')"))
         # Insertar datos base con todos los campos NOT NULL
         session.exec(text(
             "INSERT INTO soldado (cedula, nombre, apellido, rango, unidad, id_usuario) "
@@ -93,7 +93,7 @@ def test_buscar_candidatos_sustitucion_ideal():
     SQLModel.metadata.create_all(engine)
 
     with Session(engine) as session:
-        session.exec(text("INSERT INTO usuario (username, password_hash, rol) VALUES ('test', 'x', 'admin')"))
+        session.exec(text("INSERT INTO usuario (username, password_hash, rol, created_at) VALUES ('test', 'x', 'admin', '2026-01-01 00:00:00')"))
         # Insertar 3 soldados
         session.exec(text("INSERT INTO soldado (cedula, nombre, apellido, rango, unidad, id_usuario) VALUES ('V001', 'A', 'Titular', 'cabo', 'Inf', 1)"))
         session.exec(text("INSERT INTO soldado (cedula, nombre, apellido, rango, unidad, id_usuario) VALUES ('V002', 'B', 'Ideal', 'cabo', 'Inf', 1)"))
@@ -130,7 +130,7 @@ def test_confirmar_trueque():
     SQLModel.metadata.create_all(engine)
 
     with Session(engine) as session:
-        session.exec(text("INSERT INTO usuario (username, password_hash, rol) VALUES ('test', 'x', 'admin')"))
+        session.exec(text("INSERT INTO usuario (username, password_hash, rol, created_at) VALUES ('test', 'x', 'admin', '2026-01-01 00:00:00')"))
         # Insertar 2 soldados
         session.exec(text("INSERT INTO soldado (cedula, nombre, apellido, rango, unidad, id_usuario) VALUES ('V001', 'Pedro', 'González', 'cabo primero', 'Inf', 1)"))
         session.exec(text("INSERT INTO soldado (cedula, nombre, apellido, rango, unidad, id_usuario) VALUES ('V002', 'Andrés', 'Ramírez', 'sargento segundo', 'Inf', 1)"))
