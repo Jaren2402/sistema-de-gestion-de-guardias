@@ -8,7 +8,6 @@ from sqlmodel import Field, SQLModel
 class Soldado(SQLModel, table=True):
     __tablename__ = 'soldado'
 
-    # Atributos
     id_soldado:     Optional[int] = Field(default=None, primary_key=True)
     nombre:         str
     apellido:       str
@@ -16,15 +15,16 @@ class Soldado(SQLModel, table=True):
     rango:          str
     unidad:         str
     fecha_registro: Optional[datetime] = Field(default=None)
+    id_usuario:     Optional[int] = Field(default=None, foreign_key="usuario.id_usuario")
 
 # Tabla punto_guardia
 class PuntoGuardia(SQLModel, table=True):
     __tablename__ = "punto_guardia"
 
-    # Atributos
     id_punto   : Optional[int] = Field(default=None, primary_key=True)
-    nombre     : str = Field(unique=True)  # Ej: "Entrada Principal"
+    nombre     : str = Field(unique=True)
     descripcion: Optional[str] = Field(default=None)
+    id_usuario : Optional[int] = Field(default=None, foreign_key="usuario.id_usuario")
 
 # Tabla guardia
 class Guardia(SQLModel, table=True):
@@ -68,3 +68,21 @@ class Novedad(SQLModel, table=True):
     id_asignacion: int = Field(foreign_key="asignacion.id_asignacion")
     descripcion: str
     fecha_reporte: datetime = Field(default_factory=datetime.utcnow)
+
+
+class Usuario(SQLModel, table=True):
+    __tablename__ = "usuario"
+    id_usuario: Optional[int] = Field(default=None, primary_key=True)
+    username: str = Field(unique=True)
+    password_hash: str
+    rol: str = Field(default="admin")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class Sesion(SQLModel, table=True):
+    __tablename__ = "sesion"
+    id_sesion: Optional[int] = Field(default=None, primary_key=True)
+    token: str = Field(unique=True, index=True)
+    id_usuario: int = Field(foreign_key="usuario.id_usuario")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    activa: bool = Field(default=True)

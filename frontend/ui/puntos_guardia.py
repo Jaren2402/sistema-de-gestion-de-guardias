@@ -2,6 +2,7 @@ import asyncio
 
 import flet as ft
 import httpx
+from api import get_token
 from config import URL_BACKEND
 from skeleton import hover_row, loading_bar, module_header, no_data
 from skeleton import table_row as sk_row
@@ -44,7 +45,8 @@ def build(page: ft.Page):
         await asyncio.sleep(0.3)
         try:
             async with httpx.AsyncClient() as cliente:
-                resp = await cliente.get(f"{URL_BACKEND}/puntos")
+                token = get_token(page)
+                resp = await cliente.get(f"{URL_BACKEND}/puntos", params={"token": token})
                 datos = resp.json()
                 body.controls.clear()
                 for p in datos:
@@ -105,15 +107,16 @@ def build(page: ft.Page):
 
         try:
             async with httpx.AsyncClient() as cliente:
+                token = get_token(page)
                 if id_edicion.value:
                     resp = await cliente.put(
                         f"{URL_BACKEND}/puntos/editar/{id_edicion.value}",
-                        params=datos,
+                        params={**datos, "token": token},
                     )
                 else:
                     resp = await cliente.post(
                         f"{URL_BACKEND}/puntos/crear",
-                        params=datos,
+                        params={**datos, "token": token},
                     )
                 resultado = resp.json()
                 if "error" in resultado:
@@ -133,7 +136,8 @@ def build(page: ft.Page):
         id_punto = e.control.data
         try:
             async with httpx.AsyncClient() as cliente:
-                resp = await cliente.delete(f"{URL_BACKEND}/puntos/eliminar/{id_punto}")
+                token = get_token(page)
+                resp = await cliente.delete(f"{URL_BACKEND}/puntos/eliminar/{id_punto}", params={"token": token})
                 resultado = resp.json()
                 if "error" in resultado:
                     texto_estado.value = resultado['error']
@@ -170,6 +174,5 @@ def build(page: ft.Page):
         no_data_container,
     ])
 
-    page.run_task(cargar_tabla)
-
-    return {"panel": panel}
+    return {"panel": panel,
+            "cargar_tabla": cargar_tabla,}

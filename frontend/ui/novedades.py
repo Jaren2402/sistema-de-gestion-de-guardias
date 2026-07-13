@@ -2,6 +2,7 @@ import asyncio
 
 import flet as ft
 import httpx
+from api import get_token
 from config import URL_BACKEND
 from skeleton import hover_row, loading_bar, module_header, no_data
 from skeleton import table_row as sk_row
@@ -55,10 +56,11 @@ def build(page: ft.Page):
 
         try:
             async with httpx.AsyncClient() as cliente:
-                resp_cal = await cliente.get(f"{URL_BACKEND}/calendario-ver/{año}/{mes}")
+                token = get_token(page)
+                resp_cal = await cliente.get(f"{URL_BACKEND}/calendario-ver/{año}/{mes}", params={"token": token})
                 asignaciones = resp_cal.json().get("asignaciones", [])
 
-                resp_nov = await cliente.get(f"{URL_BACKEND}/novedades/{mes}/{año}")
+                resp_nov = await cliente.get(f"{URL_BACKEND}/novedades/{mes}/{año}", params={"token": token})
                 novedades = {n["id_asignacion"]: n for n in resp_nov.json()}
 
                 body.controls.clear()
@@ -119,9 +121,10 @@ def build(page: ft.Page):
             nueva_desc = campo_novedad.value or "Sin novedad"
             try:
                 async with httpx.AsyncClient() as cliente:
+                    token = get_token(page)
                     resp = await cliente.post(
                         f"{URL_BACKEND}/novedades",
-                        params={"id_asignacion": id_asig, "descripcion": nueva_desc}
+                        params={"id_asignacion": id_asig, "descripcion": nueva_desc, "token": token}
                     )
                     resultado = resp.json()
                     if "error" in resultado:

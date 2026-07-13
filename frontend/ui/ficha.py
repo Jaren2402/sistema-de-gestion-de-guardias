@@ -2,6 +2,7 @@ import asyncio
 
 import flet as ft
 import httpx
+from api import get_token
 from config import URL_BACKEND
 from skeleton import hover_row, loading_bar, module_header, no_data
 from skeleton import table_row as sk_row
@@ -51,7 +52,8 @@ def build(page: ft.Page):
         while intentos < max_intentos:
             try:
                 async with httpx.AsyncClient() as cliente:
-                    resp = await cliente.get(f"{URL_BACKEND}/soldados")
+                    token = get_token(page)
+                    resp = await cliente.get(f"{URL_BACKEND}/soldados", params={"token": token})
                     datos = resp.json()
                     if datos:
                         selector_soldado.options = [
@@ -88,7 +90,8 @@ def build(page: ft.Page):
         await asyncio.sleep(0.3)
         try:
             async with httpx.AsyncClient() as cliente:
-                resp = await cliente.get(f"{URL_BACKEND}/ficha-soldado-ver/{id_soldado}/{mes}/{año}")
+                token = get_token(page)
+                resp = await cliente.get(f"{URL_BACKEND}/ficha-soldado-ver/{id_soldado}/{mes}/{año}", params={"token": token})
                 datos = resp.json()
 
                 guardias = datos.get("guardias", [])
@@ -139,8 +142,6 @@ def build(page: ft.Page):
         selector_mes.value = str(mes)
         selector_año.value = str(año)
         await cargar_ficha()
-
-    page.run_task(cargar_dropdown)
 
     no_data_container = no_data(ft.Icons.PERSON_SEARCH, "Seleccione un soldado y presione 'Ver ficha'")
     cont_tabla = ft.Row([

@@ -2,6 +2,7 @@ import asyncio
 
 import flet as ft
 import httpx
+from api import get_token
 from config import URL_BACKEND
 from skeleton import hover_row, loading_bar, module_header, placeholder
 from theme import *
@@ -64,7 +65,8 @@ def build(page: ft.Page):
         await asyncio.sleep(0.3)
         try:
             async with httpx.AsyncClient() as cliente:
-                resp = await cliente.get(f"{URL_BACKEND}/historial-sustituciones/{mes}/{año}")
+                token = get_token(page)
+                resp = await cliente.get(f"{URL_BACKEND}/historial-sustituciones/{mes}/{año}", params={"token": token})
                 datos = resp.json()
                 lista_historial.controls.clear()
 

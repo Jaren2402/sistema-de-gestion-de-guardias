@@ -3,6 +3,7 @@ import datetime as dt
 
 import flet as ft
 import httpx
+from api import get_token
 from config import URL_BACKEND
 from skeleton import hover_row, loading_bar, module_header, no_data, toast
 from skeleton import table_row as sk_row
@@ -136,7 +137,8 @@ def build(page: ft.Page, on_soldados_actualizados=None, on_ver_ficha=None):
         await asyncio.sleep(0.3)
         try:
             async with httpx.AsyncClient() as cliente:
-                respuesta = await cliente.get(f"{URL_BACKEND}/soldados")
+                token = get_token(page)
+                respuesta = await cliente.get(f"{URL_BACKEND}/soldados", params={"token": token})
                 _datos = respuesta.json()
                 _filtrar()
                 texto_estado.value = ""
@@ -162,9 +164,11 @@ def build(page: ft.Page, on_soldados_actualizados=None, on_ver_ficha=None):
             with open(archivo.path, "rb") as f:
                 contenido = f.read()
             async with httpx.AsyncClient() as cliente:
+                token = get_token(page)
                 resp = await cliente.post(
                     f"{URL_BACKEND}/importar_soldados",
-                    files={"archivo": (archivo.name, contenido)}
+                    files={"archivo": (archivo.name, contenido)},
+                    params={"token": token}
                 )
                 data = resp.json()
                 if "error" in data:
@@ -203,8 +207,6 @@ def build(page: ft.Page, on_soldados_actualizados=None, on_ver_ficha=None):
         cont_tabla,
         no_data_container,
     ])
-
-    page.run_task(cargar)
 
     return {
         "panel": panel,

@@ -4,6 +4,7 @@ import tempfile
 
 import flet as ft
 import httpx
+from api import get_token
 from config import URL_BACKEND
 from skeleton import hover_row, loading_bar, module_header
 from theme import *
@@ -134,9 +135,10 @@ def build(page: ft.Page):
         await asyncio.sleep(0.3)
         try:
             async with httpx.AsyncClient() as cliente:
+                token = get_token(page)
                 resp = await cliente.post(
                     f"{URL_BACKEND}/generar-calendario",
-                    params={"mes": mes, "año": año}
+                    params={"mes": mes, "año": año, "token": token}
                 )
                 datos = resp.json()
                 if "error" in datos:
@@ -160,7 +162,8 @@ def build(page: ft.Page):
         await asyncio.sleep(0.3)
         try:
             async with httpx.AsyncClient() as cliente:
-                resp = await cliente.get(f"{URL_BACKEND}/calendario-ver/{año}/{mes}")
+                token = get_token(page)
+                resp = await cliente.get(f"{URL_BACKEND}/calendario-ver/{año}/{mes}", params={"token": token})
                 datos = resp.json()
                 _asignaciones_raw = datos.get("asignaciones", [])
                 _reconstruir()
@@ -180,7 +183,8 @@ def build(page: ft.Page):
         await asyncio.sleep(0.3)
         try:
             async with httpx.AsyncClient() as cliente:
-                resp = await cliente.get(f"{URL_BACKEND}/exportar-pdf/{mes}/{año}")
+                token = get_token(page)
+                resp = await cliente.get(f"{URL_BACKEND}/exportar-pdf/{mes}/{año}", params={"token": token})
                 if resp.status_code == 200:
                     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
                     tmp.write(resp.content)
@@ -205,7 +209,8 @@ def build(page: ft.Page):
         await asyncio.sleep(0.3)
         try:
             async with httpx.AsyncClient() as cliente:
-                resp = await cliente.post(f"{URL_BACKEND}/difundir/{mes}/{año}")
+                token = get_token(page)
+                resp = await cliente.post(f"{URL_BACKEND}/difundir/{mes}/{año}", params={"token": token})
                 datos = resp.json()
                 if "error" in datos:
                     texto_estado.value = datos['error']

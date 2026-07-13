@@ -4,6 +4,7 @@ from datetime import date, datetime
 
 import flet as ft
 import httpx
+from api import get_token
 from config import URL_BACKEND
 from skeleton import hover_row, loading_bar, module_header, no_data, toast
 from skeleton import table_row as sk_row
@@ -138,7 +139,8 @@ def build(page: ft.Page):
         while intentos < max_intentos:
             try:
                 async with httpx.AsyncClient() as cliente:
-                    resp = await cliente.get(f"{URL_BACKEND}/soldados")
+                    token = get_token(page)
+                    resp = await cliente.get(f"{URL_BACKEND}/soldados", params={"token": token})
                     datos = resp.json()
                     if datos:
                         selector_soldado.options = [
@@ -164,7 +166,8 @@ def build(page: ft.Page):
         await asyncio.sleep(0.3)
         try:
             async with httpx.AsyncClient() as cliente:
-                resp = await cliente.get(f"{URL_BACKEND}/restricciones")
+                token = get_token(page)
+                resp = await cliente.get(f"{URL_BACKEND}/restricciones", params={"token": token})
                 resp.raise_for_status()
                 _datos = resp.json()
                 if not isinstance(_datos, list):
@@ -197,11 +200,13 @@ def build(page: ft.Page):
             return
         try:
             async with httpx.AsyncClient() as cliente:
+                token = get_token(page)
                 resp = await cliente.post(f"{URL_BACKEND}/restricciones", params={
                     "id_soldado": int(selector_soldado.value),
                     "fecha_inicio": fi.isoformat(),
                     "fecha_fin": ff.isoformat(),
                     "motivo": campo_motivo.value.strip(),
+                    "token": token,
                 })
                 datos = resp.json()
                 if "error" in datos:
@@ -220,7 +225,8 @@ def build(page: ft.Page):
     async def eliminar(id_restriccion: int):
         try:
             async with httpx.AsyncClient() as cliente:
-                resp = await cliente.delete(f"{URL_BACKEND}/restricciones/{id_restriccion}")
+                token = get_token(page)
+                resp = await cliente.delete(f"{URL_BACKEND}/restricciones/{id_restriccion}", params={"token": token})
                 datos = resp.json()
                 if "error" in datos:
                     toast(page, datos["error"], "error")
@@ -254,8 +260,6 @@ def build(page: ft.Page):
         cont_tabla,
         no_data_container,
     ])
-
-    page.run_task(cargar_dropdown)
 
     return {
         "panel": panel,
