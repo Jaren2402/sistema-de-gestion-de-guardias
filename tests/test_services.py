@@ -14,7 +14,9 @@ def test_generar_calendario_sin_soldados():
     SQLModel.metadata.create_all(engine)
 
     with Session(engine) as session:
-        resultado = generar_calendario(5, 2026, session)
+        session.exec(text("INSERT INTO usuario (username, password_hash) VALUES ('test', 'x')"))
+        session.commit()
+        resultado = generar_calendario(5, 2026, 1, session)
 
     assert "error" in resultado
     assert resultado["error"] == "No hay soldados registrados."
@@ -26,13 +28,14 @@ def test_generar_calendario_sin_puntos():
     SQLModel.metadata.create_all(engine)
 
     with Session(engine) as session:
+        session.exec(text("INSERT INTO usuario (username, password_hash) VALUES ('test', 'x')"))
         # Insertar soldado con SQL textual (evita importar modelos)
         session.exec(
-            text("INSERT INTO soldado (cedula, nombre, apellido, rango, unidad) VALUES ('V123', 'Prueba', 'Soldado', 'cabo segundo', 'Infantería')")
+            text("INSERT INTO soldado (cedula, nombre, apellido, rango, unidad, id_usuario) VALUES ('V123', 'Prueba', 'Soldado', 'cabo segundo', 'Infantería', 1)")
         )
         session.commit()
 
-        resultado = generar_calendario(5, 2026, session)
+        resultado = generar_calendario(5, 2026, 1, session)
 
     assert "error" in resultado
     assert resultado["error"] == "No hay puntos de guardia definidos."
@@ -43,16 +46,17 @@ def test_flujo_completo_sustitucion_simple():
     SQLModel.metadata.create_all(engine)
 
     with Session(engine) as session:
+        session.exec(text("INSERT INTO usuario (username, password_hash) VALUES ('test', 'x')"))
         # Insertar datos base con todos los campos NOT NULL
         session.exec(text(
-            "INSERT INTO soldado (cedula, nombre, apellido, rango, unidad) "
-            "VALUES ('V001', 'Titular', 'Prueba', 'cabo', 'Inf')"
+            "INSERT INTO soldado (cedula, nombre, apellido, rango, unidad, id_usuario) "
+            "VALUES ('V001', 'Titular', 'Prueba', 'cabo', 'Inf', 1)"
         ))
         session.exec(text(
-            "INSERT INTO soldado (cedula, nombre, apellido, rango, unidad) "
-            "VALUES ('V002', 'Sustituto', 'Prueba', 'cabo', 'Inf')"
+            "INSERT INTO soldado (cedula, nombre, apellido, rango, unidad, id_usuario) "
+            "VALUES ('V002', 'Sustituto', 'Prueba', 'cabo', 'Inf', 1)"
         ))
-        session.exec(text("INSERT INTO punto_guardia (nombre) VALUES ('Entrada')"))
+        session.exec(text("INSERT INTO punto_guardia (nombre, id_usuario) VALUES ('Entrada', 1)"))
         session.exec(text(
             "INSERT INTO guardia (fecha_inicio, fecha_fin, tipo, id_punto, estado) "
             "VALUES ('2026-05-01 07:00', '2026-05-01 19:00', 'diurno', 1, 'pendiente')"
@@ -89,11 +93,12 @@ def test_buscar_candidatos_sustitucion_ideal():
     SQLModel.metadata.create_all(engine)
 
     with Session(engine) as session:
+        session.exec(text("INSERT INTO usuario (username, password_hash) VALUES ('test', 'x')"))
         # Insertar 3 soldados
-        session.exec(text("INSERT INTO soldado (cedula, nombre, apellido, rango, unidad) VALUES ('V001', 'A', 'Titular', 'cabo', 'Inf')"))
-        session.exec(text("INSERT INTO soldado (cedula, nombre, apellido, rango, unidad) VALUES ('V002', 'B', 'Ideal', 'cabo', 'Inf')"))
-        session.exec(text("INSERT INTO soldado (cedula, nombre, apellido, rango, unidad) VALUES ('V003', 'C', 'Fatigado', 'cabo', 'Inf')"))
-        session.exec(text("INSERT INTO punto_guardia (nombre) VALUES ('Entrada')"))
+        session.exec(text("INSERT INTO soldado (cedula, nombre, apellido, rango, unidad, id_usuario) VALUES ('V001', 'A', 'Titular', 'cabo', 'Inf', 1)"))
+        session.exec(text("INSERT INTO soldado (cedula, nombre, apellido, rango, unidad, id_usuario) VALUES ('V002', 'B', 'Ideal', 'cabo', 'Inf', 1)"))
+        session.exec(text("INSERT INTO soldado (cedula, nombre, apellido, rango, unidad, id_usuario) VALUES ('V003', 'C', 'Fatigado', 'cabo', 'Inf', 1)"))
+        session.exec(text("INSERT INTO punto_guardia (nombre, id_usuario) VALUES ('Entrada', 1)"))
 
         # Guardia que queremos sustituir (1 mayo diurno)
         session.exec(text("INSERT INTO guardia (fecha_inicio, fecha_fin, tipo, id_punto, estado) VALUES ('2026-05-01 07:00', '2026-05-01 19:00', 'diurno', 1, 'pendiente')"))
@@ -108,7 +113,7 @@ def test_buscar_candidatos_sustitucion_ideal():
 
         # Ejecutar búsqueda para la asignación 1
         from backend.services import buscar_candidatos_sustitucion
-        resultado = buscar_candidatos_sustitucion(1, session)
+        resultado = buscar_candidatos_sustitucion(1, 1, session)
 
         # Verificar que hay candidatos
         assert "candidatos" in resultado
@@ -125,11 +130,12 @@ def test_confirmar_trueque():
     SQLModel.metadata.create_all(engine)
 
     with Session(engine) as session:
+        session.exec(text("INSERT INTO usuario (username, password_hash) VALUES ('test', 'x')"))
         # Insertar 2 soldados
-        session.exec(text("INSERT INTO soldado (cedula, nombre, apellido, rango, unidad) VALUES ('V001', 'Pedro', 'González', 'cabo primero', 'Inf')"))
-        session.exec(text("INSERT INTO soldado (cedula, nombre, apellido, rango, unidad) VALUES ('V002', 'Andrés', 'Ramírez', 'sargento segundo', 'Inf')"))
+        session.exec(text("INSERT INTO soldado (cedula, nombre, apellido, rango, unidad, id_usuario) VALUES ('V001', 'Pedro', 'González', 'cabo primero', 'Inf', 1)"))
+        session.exec(text("INSERT INTO soldado (cedula, nombre, apellido, rango, unidad, id_usuario) VALUES ('V002', 'Andrés', 'Ramírez', 'sargento segundo', 'Inf', 1)"))
         # Insertar punto de guardia
-        session.exec(text("INSERT INTO punto_guardia (nombre) VALUES ('Entrada')"))
+        session.exec(text("INSERT INTO punto_guardia (nombre, id_usuario) VALUES ('Entrada', 1)"))
         # Insertar dos guardias (días distintos)
         session.exec(text("INSERT INTO guardia (fecha_inicio, fecha_fin, tipo, id_punto, estado) VALUES ('2026-05-10 07:00', '2026-05-10 19:00', 'diurno', 1, 'pendiente')"))
         session.exec(text("INSERT INTO guardia (fecha_inicio, fecha_fin, tipo, id_punto, estado) VALUES ('2026-05-15 07:00', '2026-05-15 19:00', 'diurno', 1, 'pendiente')"))
