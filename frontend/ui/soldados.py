@@ -161,6 +161,8 @@ def build(page: ft.Page, on_soldados_actualizados=None, on_ver_ficha=None):
         page.update()
         await asyncio.sleep(0.3)
         try:
+            if archivo.path is None:
+                await selector_archivo.upload_all()
             with open(archivo.path, "rb") as f:
                 contenido = f.read()
             async with httpx.AsyncClient() as cliente:
