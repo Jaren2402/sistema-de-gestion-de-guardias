@@ -375,6 +375,8 @@ async def difundir_endpoint(
 
 @app.post("/login")
 def login(username: str, password: str, session: Session = Depends(get_session)):
+    if len(username) < 5 or len(password) < 8 or username == password:
+        return {"error": "Credenciales inv\u00e1lidas"}
     usuario = session.exec(select(Usuario).where(Usuario.username == username)).first()
     if not usuario or usuario.password_hash != hashlib.sha256(password.encode()).hexdigest():
         return {"error": "Credenciales inv\u00e1lidas"}
@@ -387,6 +389,12 @@ def login(username: str, password: str, session: Session = Depends(get_session))
 
 @app.post("/register")
 def register(username: str, password: str, session: Session = Depends(get_session)):
+    if len(username) < 5:
+        return {"error": "El usuario debe tener al menos 5 caracteres"}
+    if len(password) < 8:
+        return {"error": "La contrase\u00f1a debe tener al menos 8 caracteres"}
+    if username == password:
+        return {"error": "El usuario y la contrase\u00f1a no pueden ser iguales"}
     existente = session.exec(select(Usuario).where(Usuario.username == username)).first()
     if existente:
         return {"error": "El usuario ya existe"}

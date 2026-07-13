@@ -111,12 +111,16 @@ def login_screen(page: ft.Page, on_login_exitoso):
             password = txt_password.value
             if not username or not password:
                 raise ValueError("Completa todos los campos")
+            if len(username) < 5:
+                raise ValueError("El usuario debe tener al menos 5 caracteres")
+            if len(password) < 8:
+                raise ValueError("La contrase\u00f1a debe tener al menos 8 caracteres")
+            if username == password:
+                raise ValueError("El usuario y la contrase\u00f1a no pueden ser iguales")
 
             if es_registro:
                 if password != txt_confirmar.value:
                     raise ValueError("Las contrase\u00f1as no coinciden")
-                if len(password) < 6:
-                    raise ValueError("La contrase\u00f1a debe tener al menos 6 caracteres")
 
             async with httpx.AsyncClient() as cli:
                 endpoint = f"{URL_BACKEND}/register" if es_registro else f"{URL_BACKEND}/login"

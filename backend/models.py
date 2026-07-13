@@ -1,17 +1,21 @@
 from datetime import date, datetime
 from typing import Optional
 
+from sqlalchemy import UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 
 # Tabla soldado
 class Soldado(SQLModel, table=True):
     __tablename__ = 'soldado'
+    __table_args__ = (
+        UniqueConstraint('cedula', 'id_usuario', name='uq_soldado_cedula_usuario'),
+    )
 
     id_soldado:     Optional[int] = Field(default=None, primary_key=True)
     nombre:         str
     apellido:       str
-    cedula:         str = Field(unique=True)
+    cedula:         str
     rango:          str
     unidad:         str
     fecha_registro: Optional[datetime] = Field(default=None)
@@ -20,9 +24,12 @@ class Soldado(SQLModel, table=True):
 # Tabla punto_guardia
 class PuntoGuardia(SQLModel, table=True):
     __tablename__ = "punto_guardia"
+    __table_args__ = (
+        UniqueConstraint('nombre', 'id_usuario', name='uq_punto_nombre_usuario'),
+    )
 
     id_punto   : Optional[int] = Field(default=None, primary_key=True)
-    nombre     : str = Field(unique=True)
+    nombre     : str
     descripcion: Optional[str] = Field(default=None)
     id_usuario : Optional[int] = Field(default=None, foreign_key="usuario.id_usuario")
 

@@ -4,7 +4,7 @@ import datetime as dt
 import flet as ft
 import httpx
 from api import get_token
-from config import URL_BACKEND
+from config import UPLOAD_DIR, URL_BACKEND
 from skeleton import hover_row, loading_bar, module_header, no_data, toast
 from skeleton import table_row as sk_row
 from theme import *
@@ -161,6 +161,12 @@ def build(page: ft.Page, on_soldados_actualizados=None, on_ver_ficha=None):
         page.update()
         await asyncio.sleep(0.3)
         try:
+            if archivo.path is None:
+                upload_url = page.get_upload_url(archivo.name, 600)
+                await selector_archivo.upload([
+                    ft.FilePickerUploadFile(name=archivo.name, upload_url=upload_url, method="PUT")
+                ])
+                archivo.path = f"{UPLOAD_DIR}/{archivo.name}"
             with open(archivo.path, "rb") as f:
                 contenido = f.read()
             async with httpx.AsyncClient() as cliente:
