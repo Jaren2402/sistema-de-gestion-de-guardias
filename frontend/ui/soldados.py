@@ -49,6 +49,7 @@ def build(page: ft.Page, on_soldados_actualizados=None, on_ver_ficha=None):
 
     texto_estado = ft.Text()
     selector_archivo = ft.FilePicker()
+    page.overlay.append(selector_archivo)
 
     def _parse_fecha(valor):
         try:
