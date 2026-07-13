@@ -10,7 +10,7 @@ from database import crear_tablas, get_session
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, Response
-from models import Restriccion, Sesion, Soldado, Usuario
+from models import PuntoGuardia, Restriccion, Sesion, Soldado, Usuario
 from services import (
     actualizar_soldado,
     buscar_candidatos_sustitucion,
@@ -66,7 +66,7 @@ def health():
 
 
 def get_usuario_id(token: str = Query(...), session: Session = Depends(get_session)) -> int:
-    sesion = session.exec(select(Sesion).where(Sesion.token == token, Sesion.activa == True)).first()
+    sesion = session.exec(select(Sesion).where(Sesion.token == token, Sesion.activa)).first()
     if not sesion:
         raise HTTPException(status_code=401, detail="Sesión inválida")
     return sesion.id_usuario
@@ -406,7 +406,7 @@ def register(username: str, password: str, session: Session = Depends(get_sessio
 
 @app.post("/logout")
 def logout(token: str, session: Session = Depends(get_session)):
-    sesion = session.exec(select(Sesion).where(Sesion.token == token, Sesion.activa == True)).first()
+    sesion = session.exec(select(Sesion).where(Sesion.token == token, Sesion.activa)).first()
     if sesion:
         sesion.activa = False
         session.commit()
@@ -415,7 +415,7 @@ def logout(token: str, session: Session = Depends(get_session)):
 
 @app.get("/verificar-sesion")
 def verificar_sesion(token: str, session: Session = Depends(get_session)):
-    sesion = session.exec(select(Sesion).where(Sesion.token == token, Sesion.activa == True)).first()
+    sesion = session.exec(select(Sesion).where(Sesion.token == token, Sesion.activa)).first()
     if not sesion:
         return {"valido": False}
     usuario = session.get(Usuario, sesion.id_usuario)

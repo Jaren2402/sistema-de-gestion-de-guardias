@@ -1,6 +1,6 @@
 import asyncio
 import traceback
- 
+
 import flet as ft
 import httpx
 from config import URL_BACKEND
@@ -303,8 +303,8 @@ async def main(page: ft.Page):
                 pass
         page.session.store.remove("session_token")
         page.controls.clear()
-        from ui.login import LoginScreen
-        page.add(LoginScreen(page, on_login_exitoso))
+        from ui.login import login_screen
+        page.add(login_screen(page, on_login_exitoso))
         page.update()
 
     async def on_login_exitoso(token, usuario):
@@ -324,8 +324,8 @@ async def main(page: ft.Page):
             pass
 
     if not sesion_valida:
-        from ui.login import LoginScreen
-        page.add(LoginScreen(page, on_login_exitoso))
+        from ui.login import login_screen
+        page.add(login_screen(page, on_login_exitoso))
         page.update()
         return
 

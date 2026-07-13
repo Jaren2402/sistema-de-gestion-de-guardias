@@ -34,14 +34,14 @@ def build(page: ft.Page):
     # ============================================================
     txt_pct = ft.Text("—", size=34, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE)
 
-    W = 140
+    w = 140
     circulo = ft.ProgressRing(
         value=None,
         stroke_width=14,
         color=PRIMARY,
         bgcolor=SURFACE_LIGHT,
-        width=W,
-        height=W,
+        width=w,
+        height=w,
     )
 
     async def cargar(e=None):
@@ -109,10 +109,10 @@ def build(page: ft.Page):
             ft.Container(
                 content=txt_pct,
                 alignment=ft.Alignment(0, 0),
-                width=W,
-                height=W,
+                width=w,
+                height=w,
             ),
-        ], width=W, height=W),
+        ], width=w, height=w),
         width=200,
         height=200,
         alignment=ft.Alignment(0, 0),

@@ -1,7 +1,7 @@
 import hashlib
 
-from sqlmodel import Session, SQLModel, create_engine, select
 from models import Usuario
+from sqlmodel import Session, SQLModel, create_engine, select
 
 # Ruta del archivo SQLite (si no existe, se crea automáticamente)
 sqlite_url = 'sqlite:///guardias.db'

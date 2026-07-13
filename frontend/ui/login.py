@@ -6,12 +6,12 @@ from config import URL_BACKEND
 from theme import *
 
 
-def LoginScreen(page: ft.Page, on_login_exitoso):
+def login_screen(page: ft.Page, on_login_exitoso):
     outer_ref = ft.Ref[ft.Container]()
     es_registro = False
 
-    CARD_BG = "#121212"
-    CARD_BORDER = "#2A2A2A"
+    card_bg = "#121212"
+    card_border = "#2A2A2A"
 
     txt_usuario = ft.TextField(
         label="Usuario",
@@ -194,12 +194,12 @@ def LoginScreen(page: ft.Page, on_login_exitoso):
             btn_toggle,
         ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=0),
         width=412,
-        bgcolor=CARD_BG,
+        bgcolor=card_bg,
         border=ft.Border(
-            top=ft.BorderSide(1, CARD_BORDER),
-            bottom=ft.BorderSide(1, CARD_BORDER),
-            left=ft.BorderSide(1, CARD_BORDER),
-            right=ft.BorderSide(1, CARD_BORDER),
+            top=ft.BorderSide(1, card_border),
+            bottom=ft.BorderSide(1, card_border),
+            left=ft.BorderSide(1, card_border),
+            right=ft.BorderSide(1, card_border),
         ),
         border_radius=20,
         padding=ft.Padding(left=36, top=48, right=36, bottom=48),
