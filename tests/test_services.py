@@ -69,7 +69,7 @@ def test_flujo_completo_sustitucion_simple():
         session.commit()
 
         # Ejecutar la sustitución
-        resultado = confirmar_sustitucion(1, 2, session)
+        resultado = confirmar_sustitucion(1, 2, "motivo de prueba", session)
 
         # Verificar respuesta
         assert "mensaje" in resultado
@@ -146,7 +146,7 @@ def test_confirmar_trueque():
 
         # Ejecutar trueque (intercambiar soldado 2 a la asignación 1)
         from backend.services import confirmar_trueque
-        resultado = confirmar_trueque(1, 2, 2, session)
+        resultado = confirmar_trueque(1, 2, 2, "motivo de prueba", session)
 
         # Verificar mensaje de éxito
         assert "mensaje" in resultado
