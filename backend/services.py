@@ -303,6 +303,12 @@ def buscar_candidatos_sustitucion(id_asignacion_original: int, usuario_id: int, 
             )
         ).all()
 
+        restricciones_original = session.exec(
+            select(Restriccion).where(
+                Restriccion.id_soldado == asignacion_original.id_soldado
+            )
+        ).all()
+
         inicio_mes = fecha_guardia.replace(day=1)
         if fecha_guardia.month == 12:
             fin_mes = inicio_mes.replace(year=fecha_guardia.year + 1, month=1) - timedelta(days=1)
@@ -357,6 +363,11 @@ def buscar_candidatos_sustitucion(id_asignacion_original: int, usuario_id: int, 
                 ).first()
 
                 if guardia_de_s:
+                    if any(
+                        r.fecha_inicio <= guardia_de_s.fecha_inicio.date() <= r.fecha_fin
+                        for r in restricciones_original
+                    ):
+                        continue
                     puede_cubrir_a = _puede_cubrir_guardia(
                         session.get(Soldado, asignacion_original.id_soldado),
                         guardia_de_s.fecha_inicio,
@@ -383,6 +394,10 @@ def buscar_candidatos_sustitucion(id_asignacion_original: int, usuario_id: int, 
             else:
                 candidatos_fatigados.append((s, puede_cubrir["horas_descanso"], f"⚠️ Solo {puede_cubrir['horas_descanso']:.0f}h descanso"))
 
+        ids_intercambio = {i["id_soldado_B"] for i in intercambios}
+        candidatos_ideales = [(s, h, e) for s, h, e in candidatos_ideales if s.id_soldado not in ids_intercambio]
+        candidatos_fatigados = [(s, h, e) for s, h, e in candidatos_fatigados if s.id_soldado not in ids_intercambio]
+
         def clave(item):
             s, _, _ = item
             puntos = puntos_soldados.get(s.id_soldado, 999)
@@ -398,7 +413,7 @@ def buscar_candidatos_sustitucion(id_asignacion_original: int, usuario_id: int, 
             candidatos_finales = candidatos_fatigados
 
         return {
-            "intercambios": intercambios[:5],
+            "intercambios": intercambios,
             "candidatos": [
                 {
                     "id_soldado": s.id_soldado,
@@ -406,7 +421,7 @@ def buscar_candidatos_sustitucion(id_asignacion_original: int, usuario_id: int, 
                     "nombre": f"{s.nombre} {s.apellido}",
                     "rango": s.rango,
                     "estado": estado
-                } for s, _, estado in candidatos_finales[:5]
+                } for s, _, estado in candidatos_finales
             ]
         }
     except Exception as ex:
@@ -438,7 +453,7 @@ def _puede_cubrir_guardia(soldado: Soldado, fecha_guardia: datetime, session: Se
         "horas_descanso": horas_descanso
     }
 
-def confirmar_sustitucion(id_asignacion_original: int, id_nuevo_soldado: int, session: Session) -> dict:
+def confirmar_sustitucion(id_asignacion_original: int, id_nuevo_soldado: int, motivo: str, session: Session) -> dict:
     """Realiza la sustitución simple: anula la original y crea una nueva asignación titular."""
     try:
         asignacion_original = session.get(Asignacion, id_asignacion_original)
@@ -455,8 +470,10 @@ def confirmar_sustitucion(id_asignacion_original: int, id_nuevo_soldado: int, se
             id_asignacion_original=asignacion_original.id_asignacion
         )
         session.add(nueva_asignacion)
+        session.flush()
+
+        crear_novedad(nueva_asignacion.id_asignacion, f"SUSTITUCIÓN: {motivo}", session)
         session.commit()
-        session.refresh(nueva_asignacion)
 
         return {"mensaje": "Sustitución realizada correctamente.", "id_nueva_asignacion": nueva_asignacion.id_asignacion}
     except Exception as ex:
@@ -464,7 +481,7 @@ def confirmar_sustitucion(id_asignacion_original: int, id_nuevo_soldado: int, se
         _log_error("confirmar_sustitucion", ex)
         return {"error": f"Error al realizar sustitución: {ex}"}
 
-def confirmar_trueque(id_asignacion_a: int, id_asignacion_b: int, id_soldado_b: int, session: Session) -> dict:
+def confirmar_trueque(id_asignacion_a: int, id_asignacion_b: int, id_soldado_b: int, motivo: str, session: Session) -> dict:
     """Intercambia los soldados de dos guardias (trueque binario)."""
     try:
         asignacion_a = session.get(Asignacion, id_asignacion_a)
@@ -494,7 +511,7 @@ def confirmar_trueque(id_asignacion_a: int, id_asignacion_b: int, id_soldado_b: 
         texto_trueque = f"{nombre_original_a} (Día {guardia_a.fecha_inicio.day}) ↔ {nombre_original_b} (Día {guardia_b.fecha_inicio.day})"
         novedad = Novedad(
             id_asignacion=asignacion_a.id_asignacion,
-            descripcion=f"TRUEQUE:{texto_trueque}",
+            descripcion=f"TRUEQUE: {texto_trueque} — {motivo}",
             fecha_reporte=guardia_a.fecha_inicio
         )
         session.add(novedad)

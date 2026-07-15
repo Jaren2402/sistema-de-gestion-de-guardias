@@ -40,8 +40,8 @@ def build(page: ft.Page):
     selector_soldado = ft.Dropdown(label="Soldado", options=[], width=300)
     selector_mes = ft.Dropdown(
         label="Mes",
-        options=[ft.dropdown.Option(str(m)) for m in range(1, 13)],
-        value="5",
+        options=[ft.dropdown.Option(MESES[i]) for i in range(12)],
+        value=MESES[4],
         width=120,
     )
     selector_año = ft.TextField(label="Año", value="2026", width=100)
@@ -81,7 +81,7 @@ def build(page: ft.Page):
             return
 
         id_soldado = int(selector_soldado.value)
-        mes = int(selector_mes.value)
+        mes = MESES.index(selector_mes.value) + 1
         año = int(selector_año.value)
 
         body.controls = [sk_row(_exp) for _ in range(6)]
@@ -139,7 +139,7 @@ def build(page: ft.Page):
 
     async def cargar_para_soldado(id_soldado, mes, año):
         selector_soldado.value = str(id_soldado)
-        selector_mes.value = str(mes)
+        selector_mes.value = MESES[mes - 1]
         selector_año.value = str(año)
         await cargar_ficha()
 

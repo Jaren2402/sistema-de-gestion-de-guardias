@@ -216,10 +216,11 @@ def sustituir_guardia(
 def confirmar_sustitucion_endpoint(
     id_asignacion_original: int,
     id_nuevo_soldado: int,
+    motivo: str = "",
     usuario_id: int = Depends(get_usuario_id),
     session: Session = Depends(get_session)
 ):
-    resultado = confirmar_sustitucion(id_asignacion_original, id_nuevo_soldado, session)
+    resultado = confirmar_sustitucion(id_asignacion_original, id_nuevo_soldado, motivo, session)
     return resultado
 
 @app.post("/confirmar-trueque")
@@ -227,10 +228,11 @@ def confirmar_trueque_endpoint(
     id_asignacion_a: int,
     id_asignacion_b: int,
     id_soldado_b: int,
+    motivo: str = "",
     usuario_id: int = Depends(get_usuario_id),
     session: Session = Depends(get_session)
 ):
-    resultado = confirmar_trueque(id_asignacion_a, id_asignacion_b, id_soldado_b, session)
+    resultado = confirmar_trueque(id_asignacion_a, id_asignacion_b, id_soldado_b, motivo, session)
     return resultado
 
 @app.get("/ficha-soldado-ver/{id_soldado}/{mes}/{ano}")
@@ -370,7 +372,7 @@ async def difundir_endpoint(
     usuario_id: int = Depends(get_usuario_id),
     session: Session = Depends(get_session)
 ):
-    return await difundir_pdf(mes, ano, session)
+    return await difundir_pdf(mes, ano, usuario_id, session)
 
 
 @app.post("/login")
