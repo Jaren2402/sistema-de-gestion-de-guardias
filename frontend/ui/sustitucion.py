@@ -26,6 +26,8 @@ def build(page: ft.Page, on_sustitucion_completada=None):
     selector_ano = ft.TextField(label="Año", value="2026", width=100)
     selector_ano.on_change = lambda e: page.run_task(cargar_asignaciones)
 
+    boton_cargar = ft.FilledButton("Cargar", on_click=lambda e: page.run_task(cargar_asignaciones))
+
     selector_punto = ft.Dropdown(label="Punto", options=[ft.dropdown.Option("")], width=160)
 
     boton_refrescar_punto = ft.IconButton(
@@ -452,10 +454,9 @@ def build(page: ft.Page, on_sustitucion_completada=None):
         barra_loading,
         module_header("Sustitución", "Reemplazo y trueque de guardias"),
         ft.Divider(height=1, color=DIVIDER),
-        ft.Row([selector_mes, selector_ano, selector_punto, boton_refrescar_punto, selector_asignacion, boton_buscar], spacing=8),
+        ft.Row([selector_mes, selector_ano, boton_cargar, selector_punto, boton_refrescar_punto, selector_asignacion, boton_buscar], spacing=8),
         ft.Divider(height=1, color=DIVIDER),
         zona_resultados,
     ])
 
-    page.run_task(cargar_asignaciones)
     return {"panel": panel}
