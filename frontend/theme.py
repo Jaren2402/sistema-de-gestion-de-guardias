@@ -13,6 +13,7 @@ HEADER_BG = "#1D1D1D"
 CONTENT_BG = "#0D0D0D"
 
 TEXT = "#E8EAED"
+TEXT_PRIMARY = TEXT
 TEXT_TABLE = "#DEE1E6"
 TEXT_SECONDARY = "#9AA0A6"
 
@@ -36,6 +37,8 @@ PADDING_PAGE = 20
 PADDING_CARD = 16
 PADDING_TABLE = 10
 ROW_HEIGHT = 40
+MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+
 SPACING_SMALL = 4
 SPACING_MEDIUM = 8
 SPACING_LARGE = 16

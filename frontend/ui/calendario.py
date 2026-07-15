@@ -17,8 +17,8 @@ def build(page: ft.Page):
     barra_loading = loading_bar()
     selector_mes = ft.Dropdown(
         label="Mes",
-        options=[ft.dropdown.Option(str(m)) for m in range(1, 13)],
-        value="5",
+        options=[ft.dropdown.Option(MESES[i]) for i in range(12)],
+        value=MESES[4],
         width=120,
     )
     selector_año = ft.TextField(label="Año", value="2026", width=100)
@@ -128,7 +128,7 @@ def build(page: ft.Page):
         page.update()
 
     async def generar(e):
-        mes = int(selector_mes.value)
+        mes = MESES.index(selector_mes.value) + 1
         año = int(selector_año.value)
         barra_loading.visible = True
         page.update()
@@ -155,7 +155,7 @@ def build(page: ft.Page):
 
     async def cargar(e=None):
         nonlocal _asignaciones_raw
-        mes = int(selector_mes.value)
+        mes = MESES.index(selector_mes.value) + 1
         año = int(selector_año.value)
         barra_loading.visible = True
         page.update()
@@ -176,7 +176,7 @@ def build(page: ft.Page):
             page.update()
 
     async def descargar_pdf():
-        mes = int(selector_mes.value)
+        mes = MESES.index(selector_mes.value) + 1
         año = int(selector_año.value)
         barra_loading.visible = True
         page.update()
@@ -202,7 +202,7 @@ def build(page: ft.Page):
             page.update()
 
     async def difundir():
-        mes = int(selector_mes.value)
+        mes = MESES.index(selector_mes.value) + 1
         año = int(selector_año.value)
         barra_loading.visible = True
         page.update()

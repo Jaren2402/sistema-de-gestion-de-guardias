@@ -20,7 +20,7 @@ def build(page: ft.Page):
     campo_motivo = ft.TextField(label="Motivo", width=300)
     txt_fecha_inicio = ft.TextField(label="Fecha inicio", hint_text="YYYY-MM-DD", width=200)
     txt_fecha_fin = ft.TextField(label="Fecha fin", hint_text="YYYY-MM-DD", width=200)
-    selector_mes = ft.Dropdown(label="Mes", options=[ft.dropdown.Option(str(m)) for m in range(1, 13)], width=100)
+    selector_mes = ft.Dropdown(label="Mes", options=[ft.dropdown.Option(MESES[i]) for i in range(12)], width=100)
     selector_mes.on_change = lambda e: _filtrar()
     selector_año = ft.TextField(label="Año", hint_text="2026", width=100, on_change=lambda e: _filtrar())
     _exp = [2, 1, 1, 2, 1]
@@ -71,7 +71,7 @@ def build(page: ft.Page):
     def _filtrar():
         q = txt_buscar.value.strip().lower()
         try:
-            mes = int(selector_mes.value)
+            mes = MESES.index(selector_mes.value) + 1
             año = int(selector_año.value.strip())
             inicio_mes = date(año, mes, 1)
             fin_mes = date(año, mes, _cal.monthrange(año, mes)[1])

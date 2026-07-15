@@ -14,8 +14,8 @@ def build(page: ft.Page):
     texto_estado = ft.Text()
     selector_mes = ft.Dropdown(
         label="Mes",
-        options=[ft.dropdown.Option(str(m)) for m in range(1, 13)],
-        value="5",
+        options=[ft.dropdown.Option(MESES[i]) for i in range(12)],
+        value=MESES[4],
         width=120,
     )
     selector_año = ft.TextField(label="Año", value="2026", width=100)
@@ -58,7 +58,7 @@ def build(page: ft.Page):
 
     # --- Función de carga ---
     async def cargar_historial(e=None):
-        mes = int(selector_mes.value)
+        mes = MESES.index(selector_mes.value) + 1
         año = int(selector_año.value)
         barra_loading.visible = True
         page.update()
