@@ -218,7 +218,8 @@ def build(page: ft.Page):
 
                 puntos = sorted(set(a["punto"] for a in _asignaciones_raw))
                 selector_punto.options = [ft.dropdown.Option("Todos")] + [ft.dropdown.Option(p) for p in puntos]
-                selector_punto.value = "Todos"
+                if selector_punto.value not in [o.key for o in selector_punto.options]:
+                    selector_punto.value = "Todos"
                 _filtrar_y_renderizar()
 
         except Exception as ex:
@@ -228,6 +229,17 @@ def build(page: ft.Page):
         finally:
             barra_loading.visible = False
             page.update()
+
+    try:
+        with httpx.Client() as cliente:
+            token = get_token(page)
+            resp = cliente.get(f"{URL_BACKEND}/puntos", params={"token": token})
+            if resp.status_code == 200:
+                pts = [p["nombre"] for p in resp.json()]
+                selector_punto.options = [ft.dropdown.Option("Todos")] + [ft.dropdown.Option(p) for p in pts]
+                selector_punto.value = "Todos"
+    except Exception:
+        pass
 
     panel = ft.Column([
         barra_loading,
