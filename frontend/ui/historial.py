@@ -66,7 +66,7 @@ def build(page: ft.Page):
         try:
             async with httpx.AsyncClient() as cliente:
                 token = get_token(page)
-                resp = await cliente.get(f"{URL_BACKEND}/historial-sustituciones/{mes}/{año}", params={"token": token})
+                resp = await cliente.get(f"{URL_BACKEND}/historial-sustituciones/{mes}/{año}", headers={"Authorization": f"Bearer {token}"})
                 datos = resp.json()
                 lista_historial.controls.clear()
 

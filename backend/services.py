@@ -37,10 +37,9 @@ FACTOR_FIN_SEMANA = 1.5  # Multiplicador adicional para sábado y domingo
 
 
 def _log_error(contexto: str, ex: Exception):
-    """Registra un error en consola con formato estandarizado [ERROR] [fecha]."""
-    import traceback
-    print(f"[ERROR] [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]: [{contexto}] {ex}")
-    traceback.print_exc()
+    """Registra un error en consola con formato JSON."""
+    from logger import log_error as _log
+    _log(contexto, ex)
 
 
 def _calcular_puntos_mes(mes: int, año: int, usuario_id: int, session: Session) -> dict:
@@ -91,17 +90,20 @@ def generar_calendario(mes: int, año: int, usuario_id: int, session: Session) -
         else:
             proximo_mes = datetime(año, mes + 1, 1)
 
-        ids_guardias = select(Guardia.id_guardia).where(
-            Guardia.fecha_inicio >= inicio,
-            Guardia.fecha_inicio < proximo_mes
-        )
-        session.exec(delete(Asignacion).where(Asignacion.id_guardia.in_(ids_guardias)))
-        session.exec(
-            delete(Guardia).where(
+        guardias_a_borrar = session.exec(
+            select(Guardia.id_guardia)
+            .join(PuntoGuardia, Guardia.id_punto == PuntoGuardia.id_punto)
+            .where(
                 Guardia.fecha_inicio >= inicio,
-                Guardia.fecha_inicio < proximo_mes
+                Guardia.fecha_inicio < proximo_mes,
+                PuntoGuardia.id_usuario == usuario_id
             )
-        )
+        ).all()
+        ids_guardias = [g[0] for g in guardias_a_borrar]
+
+        if ids_guardias:
+            session.exec(delete(Asignacion).where(Asignacion.id_guardia.in_(ids_guardias)))
+            session.exec(delete(Guardia).where(Guardia.id_guardia.in_(ids_guardias)))
         session.commit()
 
         decay = 0.5
@@ -218,7 +220,7 @@ def generar_calendario(mes: int, año: int, usuario_id: int, session: Session) -
                     if dia_actual.weekday() in (5, 6):
                         factor *= FACTOR_FIN_SEMANA
                     historial[elegido.id_soldado] += factor
-                    ultima_fecha[elegido.id_soldado] = fecha_inicio_turno
+                    ultima_fecha[elegido.id_soldado] = fecha_fin_turno
 
                     asignaciones_creadas.append({
                         "fecha": dia_actual.strftime("%Y-%m-%d"),
@@ -239,7 +241,7 @@ def generar_calendario(mes: int, año: int, usuario_id: int, session: Session) -
     except Exception as ex:
         session.rollback()
         _log_error("generar_calendario", ex)
-        return {"error": f"Error al generar calendario: {ex}"}
+        return {"error": "Error al generar calendario"}
 
 def obtener_calendario(mes: int, año: int, usuario_id: int, session: Session) -> dict:
     try:
@@ -281,13 +283,17 @@ def obtener_calendario(mes: int, año: int, usuario_id: int, session: Session) -
         return {"mes": mes, "año": año, "asignaciones": asignaciones}
     except Exception as ex:
         _log_error("obtener_calendario", ex)
-        return {"error": f"Error al obtener calendario: {ex}"}
+        return {"error": "Error al obtener calendario"}
 
 def buscar_candidatos_sustitucion(id_asignacion_original: int, usuario_id: int, session: Session) -> dict:
     try:
         asignacion_original = session.get(Asignacion, id_asignacion_original)
         if not asignacion_original:
             return {"error": "Asignación no encontrada."}
+
+        soldado_original = session.get(Soldado, asignacion_original.id_soldado)
+        if not soldado_original or soldado_original.id_usuario != usuario_id:
+            return {"error": "No autorizado"}
 
         guardia_original = session.get(Guardia, asignacion_original.id_guardia)
         if not guardia_original:
@@ -426,7 +432,7 @@ def buscar_candidatos_sustitucion(id_asignacion_original: int, usuario_id: int, 
         }
     except Exception as ex:
         _log_error("buscar_candidatos_sustitucion", ex)
-        return {"error": f"Error al buscar candidatos: {ex}"}
+        return {"error": "Error al buscar candidatos"}
 
 def _puede_cubrir_guardia(soldado: Soldado, fecha_guardia: datetime, session: Session) -> dict:
     """Verifica si un soldado puede cubrir una guardia en una fecha dada (fatiga)."""
@@ -453,12 +459,20 @@ def _puede_cubrir_guardia(soldado: Soldado, fecha_guardia: datetime, session: Se
         "horas_descanso": horas_descanso
     }
 
-def confirmar_sustitucion(id_asignacion_original: int, id_nuevo_soldado: int, motivo: str, session: Session) -> dict:
+def confirmar_sustitucion(id_asignacion_original: int, id_nuevo_soldado: int, motivo: str, usuario_id: int, session: Session) -> dict:
     """Realiza la sustitución simple: anula la original y crea una nueva asignación titular."""
     try:
         asignacion_original = session.get(Asignacion, id_asignacion_original)
         if not asignacion_original:
             return {"error": "Asignación original no encontrada."}
+
+        soldado_original = session.get(Soldado, asignacion_original.id_soldado)
+        if not soldado_original or soldado_original.id_usuario != usuario_id:
+            return {"error": "No autorizado"}
+
+        nuevo_soldado = session.get(Soldado, id_nuevo_soldado)
+        if not nuevo_soldado or nuevo_soldado.id_usuario != usuario_id:
+            return {"error": "Soldado no encontrado o no pertenece al usuario actual."}
 
         asignacion_original.es_anulada = True
         session.add(asignacion_original)
@@ -472,16 +486,16 @@ def confirmar_sustitucion(id_asignacion_original: int, id_nuevo_soldado: int, mo
         session.add(nueva_asignacion)
         session.flush()
 
-        crear_novedad(nueva_asignacion.id_asignacion, f"SUSTITUCIÓN: {motivo}", session)
+        crear_novedad(nueva_asignacion.id_asignacion, f"SUSTITUCIÓN: {motivo}", usuario_id, session)
         session.commit()
 
         return {"mensaje": "Sustitución realizada correctamente.", "id_nueva_asignacion": nueva_asignacion.id_asignacion}
     except Exception as ex:
         session.rollback()
         _log_error("confirmar_sustitucion", ex)
-        return {"error": f"Error al realizar sustitución: {ex}"}
+        return {"error": "Error al realizar sustitución"}
 
-def confirmar_trueque(id_asignacion_a: int, id_asignacion_b: int, id_soldado_b: int, motivo: str, session: Session) -> dict:
+def confirmar_trueque(id_asignacion_a: int, id_asignacion_b: int, id_soldado_b: int, motivo: str, usuario_id: int, session: Session) -> dict:
     """Intercambia los soldados de dos guardias (trueque binario)."""
     try:
         asignacion_a = session.get(Asignacion, id_asignacion_a)
@@ -489,6 +503,14 @@ def confirmar_trueque(id_asignacion_a: int, id_asignacion_b: int, id_soldado_b: 
 
         if not asignacion_a or not asignacion_b:
             return {"error": "Alguna de las asignaciones no fue encontrada."}
+
+        soldado_a = session.get(Soldado, asignacion_a.id_soldado)
+        if not soldado_a or soldado_a.id_usuario != usuario_id:
+            return {"error": "No autorizado"}
+
+        soldado_b_check = session.get(Soldado, asignacion_b.id_soldado)
+        if not soldado_b_check or soldado_b_check.id_usuario != usuario_id:
+            return {"error": "No autorizado"}
 
         guardia_a = session.get(Guardia, asignacion_a.id_guardia)
         guardia_b = session.get(Guardia, asignacion_b.id_guardia)
@@ -521,7 +543,7 @@ def confirmar_trueque(id_asignacion_a: int, id_asignacion_b: int, id_soldado_b: 
     except Exception as ex:
         session.rollback()
         _log_error("confirmar_trueque", ex)
-        return {"error": f"Error al realizar trueque: {ex}"}
+        return {"error": "Error al realizar trueque"}
 
 def obtener_ficha_soldado(id_soldado: int, mes: int, año: int, session: Session) -> dict:
     """Devuelve el historial de guardias de un soldado en un mes."""
@@ -575,7 +597,7 @@ def obtener_ficha_soldado(id_soldado: int, mes: int, año: int, session: Session
         }
     except Exception as ex:
         _log_error("obtener_ficha_soldado", ex)
-        return {"error": f"Error al obtener ficha del soldado: {ex}"}
+        return {"error": "Error al obtener ficha del soldado"}
 
 def crear_soldado(cedula: str, nombre: str, apellido: str, rango: str, unidad: str, usuario_id: int, session: Session) -> dict:
     try:
@@ -806,11 +828,14 @@ def generar_pdf(mes: int, año: int, usuario_id: int, session: Session) -> Bytes
     buffer.seek(0)
     return buffer
 
-def crear_novedad(id_asignacion: int, descripcion: str, session: Session) -> dict:
+def crear_novedad(id_asignacion: int, descripcion: str, usuario_id: int, session: Session) -> dict:
     """Registra una novedad para una asignación de guardia."""
     asignacion = session.get(Asignacion, id_asignacion)
     if not asignacion:
         return {"error": "Asignación no encontrada."}
+    soldado = session.get(Soldado, asignacion.id_soldado)
+    if not soldado or soldado.id_usuario != usuario_id:
+        return {"error": "No autorizado"}
     novedad = Novedad(
         id_asignacion=id_asignacion,
         descripcion=descripcion,
@@ -1067,7 +1092,7 @@ def obtener_estadisticas(mes: int, año: int, usuario_id: int, session: Session,
         "todos_soldados": lista_soldados,
     }
 
-def obtener_historial_sustituciones(mes: int, año: int, session: Session) -> list:
+def obtener_historial_sustituciones(mes: int, año: int, usuario_id: int, session: Session) -> list:
     inicio = datetime(año, mes, 1)
     if mes == 12:
         proximo_mes = datetime(año + 1, 1, 1)
@@ -1083,7 +1108,8 @@ def obtener_historial_sustituciones(mes: int, año: int, session: Session) -> li
         .where(
             Guardia.fecha_inicio >= inicio,
             Guardia.fecha_inicio < proximo_mes,
-            Asignacion.id_asignacion_original.isnot(None)
+            Asignacion.id_asignacion_original.isnot(None),
+            PuntoGuardia.id_usuario == usuario_id,
         )
         .order_by(Guardia.fecha_inicio.desc())
     )
@@ -1110,10 +1136,15 @@ def obtener_historial_sustituciones(mes: int, año: int, session: Session) -> li
 
     # --- 2. Trueques (novedades enriquecidas) ---
     novedades_trueque = session.exec(
-        select(Novedad).where(
+        select(Novedad)
+        .join(Asignacion, Novedad.id_asignacion == Asignacion.id_asignacion)
+        .join(Guardia, Asignacion.id_guardia == Guardia.id_guardia)
+        .join(PuntoGuardia, Guardia.id_punto == PuntoGuardia.id_punto)
+        .where(
             Novedad.fecha_reporte >= inicio,
             Novedad.fecha_reporte < proximo_mes,
-            Novedad.descripcion.startswith("TRUEQUE:")
+            Novedad.descripcion.startswith("TRUEQUE:"),
+            PuntoGuardia.id_usuario == usuario_id,
         )
     ).all()
 
@@ -1145,7 +1176,8 @@ def obtener_historial_sustituciones(mes: int, año: int, session: Session) -> li
 async def difundir_pdf(mes: int, año: int, usuario_id: int, session: Session) -> dict:
     pdf_buffer = generar_pdf(mes, año, usuario_id, session)
     pdf_bytes = pdf_buffer.getvalue()
-    print(f"✅ PDF generado en memoria: {len(pdf_bytes)} bytes")
+    from logger import log_info
+    log_info(f"PDF generado: {len(pdf_bytes)} bytes")
 
     # 2. Obtener credenciales
     token = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -1166,7 +1198,9 @@ async def difundir_pdf(mes: int, año: int, usuario_id: int, session: Session) -
             if resultado.get("ok"):
                 return {"mensaje": "PDF enviado correctamente por Telegram."}
             else:
-                return {"error": f"Error de Telegram: {resultado.get('description', 'Desconocido')}"}
+                desc = resultado.get("description", "Desconocido")
+                _log_error("difundir_pdf", Exception(f"Telegram error: {desc}"))
+                return {"error": "Error al difundir por Telegram"}
     except Exception as ex:
-        print(f"[ERROR] [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]: {ex}")
-        return {"error": f"No se pudo conectar con Telegram: {ex}"}
+        _log_error("difundir_pdf", ex)
+        return {"error": "Error al difundir por Telegram"}

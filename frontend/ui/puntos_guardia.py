@@ -46,7 +46,7 @@ def build(page: ft.Page):
         try:
             async with httpx.AsyncClient() as cliente:
                 token = get_token(page)
-                resp = await cliente.get(f"{URL_BACKEND}/puntos", params={"token": token})
+                resp = await cliente.get(f"{URL_BACKEND}/puntos", headers={"Authorization": f"Bearer {token}"})
                 datos = resp.json()
                 body.controls.clear()
                 for p in datos:
@@ -111,12 +111,14 @@ def build(page: ft.Page):
                 if id_edicion.value:
                     resp = await cliente.put(
                         f"{URL_BACKEND}/puntos/editar/{id_edicion.value}",
-                        params={**datos, "token": token},
+                        params=datos,
+                        headers={"Authorization": f"Bearer {token}"},
                     )
                 else:
                     resp = await cliente.post(
                         f"{URL_BACKEND}/puntos/crear",
-                        params={**datos, "token": token},
+                        params=datos,
+                        headers={"Authorization": f"Bearer {token}"},
                     )
                 resultado = resp.json()
                 if "error" in resultado:
@@ -137,7 +139,7 @@ def build(page: ft.Page):
         try:
             async with httpx.AsyncClient() as cliente:
                 token = get_token(page)
-                resp = await cliente.delete(f"{URL_BACKEND}/puntos/eliminar/{id_punto}", params={"token": token})
+                resp = await cliente.delete(f"{URL_BACKEND}/puntos/eliminar/{id_punto}", headers={"Authorization": f"Bearer {token}"})
                 resultado = resp.json()
                 if "error" in resultado:
                     texto_estado.value = resultado['error']

@@ -72,7 +72,8 @@ def build(page: ft.Page):
                     token = get_token(page)
                     resp = await cliente.post(
                         f"{URL_BACKEND}/novedades",
-                        params={"id_asignacion": id_asignacion, "descripcion": nueva_desc, "token": token},
+                        params={"id_asignacion": id_asignacion, "descripcion": nueva_desc},
+                        headers={"Authorization": f"Bearer {token}"},
                     )
                     data = resp.json()
                     if "error" in data:
@@ -202,11 +203,11 @@ def build(page: ft.Page):
         try:
             async with httpx.AsyncClient() as cliente:
                 token = get_token(page)
-                resp_cal = await cliente.get(f"{URL_BACKEND}/calendario-ver/{ano}/{mes}", params={"token": token})
+                resp_cal = await cliente.get(f"{URL_BACKEND}/calendario-ver/{ano}/{mes}", headers={"Authorization": f"Bearer {token}"})
                 nonlocal _asignaciones_raw
                 _asignaciones_raw = resp_cal.json().get("asignaciones", [])
 
-                resp_nov = await cliente.get(f"{URL_BACKEND}/novedades/{mes}/{ano}", params={"token": token})
+                resp_nov = await cliente.get(f"{URL_BACKEND}/novedades/{mes}/{ano}", headers={"Authorization": f"Bearer {token}"})
                 nonlocal _novedades_map
                 _novedades_map = {n["id_asignacion"]: n for n in resp_nov.json()}
 
@@ -233,7 +234,7 @@ def build(page: ft.Page):
     try:
         with httpx.Client() as cliente:
             token = get_token(page)
-            resp = cliente.get(f"{URL_BACKEND}/puntos", params={"token": token})
+            resp = cliente.get(f"{URL_BACKEND}/puntos", headers={"Authorization": f"Bearer {token}"})
             if resp.status_code == 200:
                 pts = [p["nombre"] for p in resp.json()]
                 selector_punto.options = [ft.dropdown.Option("Todos")] + [ft.dropdown.Option(p) for p in pts]

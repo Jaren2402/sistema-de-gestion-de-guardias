@@ -138,7 +138,8 @@ def build(page: ft.Page):
                 token = get_token(page)
                 resp = await cliente.post(
                     f"{URL_BACKEND}/generar-calendario",
-                    params={"mes": mes, "año": año, "token": token}
+                    params={"mes": mes, "año": año},
+                    headers={"Authorization": f"Bearer {token}"}
                 )
                 datos = resp.json()
                 if "error" in datos:
@@ -163,7 +164,7 @@ def build(page: ft.Page):
         try:
             async with httpx.AsyncClient() as cliente:
                 token = get_token(page)
-                resp = await cliente.get(f"{URL_BACKEND}/calendario-ver/{año}/{mes}", params={"token": token})
+                resp = await cliente.get(f"{URL_BACKEND}/calendario-ver/{año}/{mes}", headers={"Authorization": f"Bearer {token}"})
                 datos = resp.json()
                 _asignaciones_raw = datos.get("asignaciones", [])
                 _reconstruir()
@@ -184,7 +185,7 @@ def build(page: ft.Page):
         try:
             async with httpx.AsyncClient() as cliente:
                 token = get_token(page)
-                resp = await cliente.get(f"{URL_BACKEND}/exportar-pdf/{mes}/{año}", params={"token": token})
+                resp = await cliente.get(f"{URL_BACKEND}/exportar-pdf/{mes}/{año}", headers={"Authorization": f"Bearer {token}"})
                 if resp.status_code == 200:
                     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
                     tmp.write(resp.content)
@@ -210,7 +211,7 @@ def build(page: ft.Page):
         try:
             async with httpx.AsyncClient() as cliente:
                 token = get_token(page)
-                resp = await cliente.post(f"{URL_BACKEND}/difundir/{mes}/{año}", params={"token": token})
+                resp = await cliente.post(f"{URL_BACKEND}/difundir/{mes}/{año}", headers={"Authorization": f"Bearer {token}"})
                 datos = resp.json()
                 if "error" in datos:
                     texto_estado.value = datos['error']

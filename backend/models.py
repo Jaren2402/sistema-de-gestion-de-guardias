@@ -93,3 +93,4 @@ class Sesion(SQLModel, table=True):
     id_usuario: int = Field(foreign_key="usuario.id_usuario")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     activa: bool = Field(default=True)
+

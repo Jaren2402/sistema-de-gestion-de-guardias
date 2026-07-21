@@ -139,7 +139,7 @@ def build(page: ft.Page, on_soldados_actualizados=None, on_ver_ficha=None):
         try:
             async with httpx.AsyncClient() as cliente:
                 token = get_token(page)
-                respuesta = await cliente.get(f"{URL_BACKEND}/soldados", params={"token": token})
+                respuesta = await cliente.get(f"{URL_BACKEND}/soldados", headers={"Authorization": f"Bearer {token}"})
                 _datos = respuesta.json()
                 _filtrar()
                 texto_estado.value = ""
@@ -182,7 +182,7 @@ def build(page: ft.Page, on_soldados_actualizados=None, on_ver_ficha=None):
                 resp = await cliente.post(
                     f"{URL_BACKEND}/importar_soldados",
                     files={"archivo": (archivo.name, contenido)},
-                    params={"token": token}
+                    headers={"Authorization": f"Bearer {token}"}
                 )
                 data = resp.json()
                 if "error" in data:

@@ -13,23 +13,24 @@ def test_arrastre_con_decaimiento():
     SQLModel.metadata.create_all(engine)
 
     with Session(engine) as s:
+        s.exec(text("INSERT INTO usuario (username, password_hash, rol, created_at) VALUES ('test', 'x', 'admin', '2026-01-01 00:00:00')"))
         rangos = ['cabo segundo','cabo primero','sargento segundo','sargento primero']
         for i in range(20):
             rango = rangos[i % len(rangos)]
             s.exec(text(
-                f"INSERT INTO soldado (cedula, nombre, apellido, rango, unidad) "
-                f"VALUES ('V{i:03d}', 'Test', 'Soldado{i}', '{rango}', 'Inf')"
+                f"INSERT INTO soldado (cedula, nombre, apellido, rango, unidad, id_usuario) "
+                f"VALUES ('V{i:03d}', 'Test', 'Soldado{i}', '{rango}', 'Inf', 1)"
             ))
         for pto in ['Entrada', 'Porton']:
-            s.exec(text(f"INSERT INTO punto_guardia (nombre) VALUES ('{pto}')"))
+            s.exec(text(f"INSERT INTO punto_guardia (nombre, id_usuario) VALUES ('{pto}', 1)"))
         s.commit()
 
         for mes in range(1, 5):
-            r = generar_calendario(mes, 2026, s)
+            r = generar_calendario(mes, 2026, 1, s)
             assert "error" not in r, f"Mes {mes} fallo: {r.get('error')}"
 
-        eq_1 = obtener_estadisticas(4, 2026, s, meses=1)["equidad"]["porcentaje"]
-        eq_4 = obtener_estadisticas(4, 2026, s, meses=4)["equidad"]["porcentaje"]
+        eq_1 = obtener_estadisticas(4, 2026, 1, s, meses=1)["equidad"]["porcentaje"]
+        eq_4 = obtener_estadisticas(4, 2026, 1, s, meses=4)["equidad"]["porcentaje"]
 
         assert eq_4 >= eq_1, (
             f"Equidad acumulada ({eq_4:.1f}%) deberia ser >= individual ({eq_1:.1f}%)"
@@ -42,29 +43,30 @@ def test_arrastre_nuevo_soldado_converge():
     SQLModel.metadata.create_all(engine)
 
     with Session(engine) as s:
+        s.exec(text("INSERT INTO usuario (username, password_hash, rol, created_at) VALUES ('test', 'x', 'admin', '2026-01-01 00:00:00')"))
         for i in range(16):
             s.exec(text(
-                f"INSERT INTO soldado (cedula, nombre, apellido, rango, unidad) "
-                f"VALUES ('V{i:03d}', 'Vet', 'Soldado{i}', 'cabo segundo', 'Inf')"
+                f"INSERT INTO soldado (cedula, nombre, apellido, rango, unidad, id_usuario) "
+                f"VALUES ('V{i:03d}', 'Vet', 'Soldado{i}', 'cabo segundo', 'Inf', 1)"
             ))
         for pto in ['Entrada', 'Porton']:
-            s.exec(text(f"INSERT INTO punto_guardia (nombre) VALUES ('{pto}')"))
+            s.exec(text(f"INSERT INTO punto_guardia (nombre, id_usuario) VALUES ('{pto}', 1)"))
         s.commit()
 
-        r1 = generar_calendario(1, 2026, s)
+        r1 = generar_calendario(1, 2026, 1, s)
         assert "error" not in r1
 
         s.exec(text(
-            "INSERT INTO soldado (cedula, nombre, apellido, rango, unidad) "
-            "VALUES ('V099', 'Nuevo', 'Ingresa', 'cabo segundo', 'Inf')"
+            "INSERT INTO soldado (cedula, nombre, apellido, rango, unidad, id_usuario) "
+            "VALUES ('V099', 'Nuevo', 'Ingresa', 'cabo segundo', 'Inf', 1)"
         ))
         s.commit()
 
         for mes in [2, 3]:
-            r = generar_calendario(mes, 2026, s)
+            r = generar_calendario(mes, 2026, 1, s)
             assert "error" not in r, f"Mes {mes} fallo: {r.get('error')}"
 
-        pts_m3 = _calcular_puntos_mes(3, 2026, s)
+        pts_m3 = _calcular_puntos_mes(3, 2026, 1, s)
         nuevo_pts = pts_m3.get(17, 0)
         media_m3 = sum(pts_m3.values()) / len(pts_m3)
 

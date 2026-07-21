@@ -140,7 +140,7 @@ def build(page: ft.Page):
             try:
                 async with httpx.AsyncClient() as cliente:
                     token = get_token(page)
-                    resp = await cliente.get(f"{URL_BACKEND}/soldados", params={"token": token})
+                    resp = await cliente.get(f"{URL_BACKEND}/soldados", headers={"Authorization": f"Bearer {token}"})
                     datos = resp.json()
                     if datos:
                         selector_soldado.options = [
@@ -167,7 +167,7 @@ def build(page: ft.Page):
         try:
             async with httpx.AsyncClient() as cliente:
                 token = get_token(page)
-                resp = await cliente.get(f"{URL_BACKEND}/restricciones", params={"token": token})
+                resp = await cliente.get(f"{URL_BACKEND}/restricciones", headers={"Authorization": f"Bearer {token}"})
                 resp.raise_for_status()
                 _datos = resp.json()
                 if not isinstance(_datos, list):
@@ -206,8 +206,7 @@ def build(page: ft.Page):
                     "fecha_inicio": fi.isoformat(),
                     "fecha_fin": ff.isoformat(),
                     "motivo": campo_motivo.value.strip(),
-                    "token": token,
-                })
+                }, headers={"Authorization": f"Bearer {token}"})
                 datos = resp.json()
                 if "error" in datos:
                     toast(page, datos["error"], "error")
@@ -226,7 +225,7 @@ def build(page: ft.Page):
         try:
             async with httpx.AsyncClient() as cliente:
                 token = get_token(page)
-                resp = await cliente.delete(f"{URL_BACKEND}/restricciones/{id_restriccion}", params={"token": token})
+                resp = await cliente.delete(f"{URL_BACKEND}/restricciones/{id_restriccion}", headers={"Authorization": f"Bearer {token}"})
                 datos = resp.json()
                 if "error" in datos:
                     toast(page, datos["error"], "error")

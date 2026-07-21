@@ -7,9 +7,20 @@ from datetime import date, datetime
 
 import pandas as pd
 from database import crear_tablas, get_session
+from logger import log_error, log_info, setup_logging
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Header, HTTPException, Path, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, Response
+from schemas import (
+    LoginRequest,
+    NovedadCreate,
+    PuntoCreate,
+    PuntoUpdate,
+    RegisterRequest,
+    RestriccionCreate,
+    SoldadoCreate,
+    SoldadoUpdate,
+)
 from models import PuntoGuardia, Restriccion, Sesion, Soldado, Usuario
 from services import (
     actualizar_soldado,
@@ -39,6 +50,7 @@ load_dotenv()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    setup_logging()
     crear_tablas()
     yield
 
@@ -49,23 +61,40 @@ app = FastAPI(
 
 @app.middleware("http")
 async def log_errores_middleware(request: Request, call_next):
+    correlation_id = str(uuid.uuid4())[:8]
+    request.state.correlation_id = correlation_id
+    log_info(f"{request.method} {request.url.path}", correlation_id)
     try:
         response = await call_next(request)
         return response
     except Exception as ex:
-        print(f"[ERROR] [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]: {ex}")
-        print(traceback.format_exc())
+        log_error("middleware", ex, correlation_id)
         return JSONResponse(
             status_code=500,
-            content={"error": "Error interno del servidor. Consulte los logs para más detalles."}
+            content={
+                "error": f"Ocurrió un error. Reporte el código: {correlation_id}"
+            }
         )
 
 @app.get("/health")
-def health():
-    return {"status": "ok", "timestamp": datetime.now().isoformat()}
+def health(session: Session = Depends(get_session)):
+    db_ok = False
+    try:
+        session.exec(select(Sesion).limit(1))
+        db_ok = True
+    except Exception:
+        pass
+    return {
+        "status": "ok" if db_ok else "degradado",
+        "database": "conectada" if db_ok else "fallo",
+        "timestamp": datetime.now().isoformat()
+    }
 
 
-def get_usuario_id(token: str = Query(...), session: Session = Depends(get_session)) -> int:
+def get_usuario_id(authorization: str = Header(..., alias="Authorization"), session: Session = Depends(get_session)) -> int:
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Sesión inválida")
+    token = authorization[len("Bearer "):]
     sesion = session.exec(select(Sesion).where(Sesion.token == token, Sesion.activa)).first()
     if not sesion:
         raise HTTPException(status_code=401, detail="Sesión inválida")
@@ -78,6 +107,8 @@ async def importar_soldados(
     session: Session = Depends(get_session)
 ):
     contenido = await archivo.read()
+    if len(contenido) > 100 * 1024 * 1024:
+        return {"error": "El archivo excede el tamaño máximo permitido (100 MB)."}
     df = pd.read_excel(io.BytesIO(contenido))
 
     columnas_requeridas = {
@@ -113,7 +144,7 @@ async def importar_soldados(
             insertados += 1
         except IntegrityError as ex:
             session.rollback()
-            print(f"[ERROR] [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]: [importar_soldados] Cédula duplicada: {ex}")
+            log_error("importar_soldados", ex)
             omitidos += 1
 
     session.commit()
@@ -139,12 +170,22 @@ def obtener_soldados(usuario_id: int = Depends(get_usuario_id), session: Session
     return resultado
 
 @app.post("/generar-calendario")
-def generar_calendario_endpoint(mes: int, año: int, usuario_id: int = Depends(get_usuario_id), session: Session = Depends(get_session)):
+def generar_calendario_endpoint(
+    mes: int = Query(..., ge=1, le=12),
+    año: int = Query(..., ge=2020, le=2100),
+    usuario_id: int = Depends(get_usuario_id),
+    session: Session = Depends(get_session)
+):
     resultado = generar_calendario(mes, año, usuario_id, session)
     return resultado
 
 @app.get("/calendario-ver/{ano}/{mes}")
-def ver_calendario(ano: int, mes: int, usuario_id: int = Depends(get_usuario_id), session: Session = Depends(get_session)):
+def ver_calendario(
+    ano: int = Path(..., ge=2020, le=2100),
+    mes: int = Path(..., ge=1, le=12),
+    usuario_id: int = Depends(get_usuario_id),
+    session: Session = Depends(get_session)
+):
     return obtener_calendario(mes, ano, usuario_id, session)
 
 @app.post("/restricciones")
@@ -152,13 +193,15 @@ def crear_restriccion(
     id_soldado: int,
     fecha_inicio: date,
     fecha_fin: date,
-    motivo: str,
+    motivo: str = Query(..., min_length=1, max_length=500),
     usuario_id: int = Depends(get_usuario_id),
     session: Session = Depends(get_session)
 ):
     soldado = session.get(Soldado, id_soldado)
     if not soldado or soldado.id_usuario != usuario_id:
         return {"error": "Soldado no encontrado"}
+    if fecha_fin < fecha_inicio:
+        return {"error": "fecha_fin debe ser mayor o igual a fecha_inicio"}
     nueva = Restriccion(
         id_soldado=id_soldado,
         fecha_inicio=fecha_inicio,
@@ -216,11 +259,11 @@ def sustituir_guardia(
 def confirmar_sustitucion_endpoint(
     id_asignacion_original: int,
     id_nuevo_soldado: int,
-    motivo: str = "",
+    motivo: str = Query(default="", max_length=500),
     usuario_id: int = Depends(get_usuario_id),
     session: Session = Depends(get_session)
 ):
-    resultado = confirmar_sustitucion(id_asignacion_original, id_nuevo_soldado, motivo, session)
+    resultado = confirmar_sustitucion(id_asignacion_original, id_nuevo_soldado, motivo, usuario_id, session)
     return resultado
 
 @app.post("/confirmar-trueque")
@@ -228,18 +271,18 @@ def confirmar_trueque_endpoint(
     id_asignacion_a: int,
     id_asignacion_b: int,
     id_soldado_b: int,
-    motivo: str = "",
+    motivo: str = Query(default="", max_length=500),
     usuario_id: int = Depends(get_usuario_id),
     session: Session = Depends(get_session)
 ):
-    resultado = confirmar_trueque(id_asignacion_a, id_asignacion_b, id_soldado_b, motivo, session)
+    resultado = confirmar_trueque(id_asignacion_a, id_asignacion_b, id_soldado_b, motivo, usuario_id, session)
     return resultado
 
 @app.get("/ficha-soldado-ver/{id_soldado}/{mes}/{ano}")
 def ficha_soldado(
-    id_soldado: int,
-    mes: int,
-    ano: int,
+    id_soldado: int = Path(..., ge=0),
+    mes: int = Path(..., ge=1, le=12),
+    ano: int = Path(..., ge=2020, le=2100),
     usuario_id: int = Depends(get_usuario_id),
     session: Session = Depends(get_session)
 ):
@@ -250,11 +293,11 @@ def ficha_soldado(
 
 @app.post("/soldados/crear")
 def crear_soldado_endpoint(
-    cedula: str,
-    nombre: str,
-    apellido: str,
-    rango: str,
-    unidad: str,
+    cedula: str = Query(..., min_length=1, max_length=20),
+    nombre: str = Query(..., min_length=1, max_length=100),
+    apellido: str = Query(..., min_length=1, max_length=100),
+    rango: str = Query(..., min_length=1, max_length=50),
+    unidad: str = Query(..., min_length=1, max_length=100),
     usuario_id: int = Depends(get_usuario_id),
     session: Session = Depends(get_session)
 ):
@@ -263,11 +306,11 @@ def crear_soldado_endpoint(
 @app.put("/soldados/editar/{id_soldado}")
 def editar_soldado_endpoint(
     id_soldado: int,
-    cedula: str,
-    nombre: str,
-    apellido: str,
-    rango: str,
-    unidad: str,
+    cedula: str = Query(..., min_length=1, max_length=20),
+    nombre: str = Query(..., min_length=1, max_length=100),
+    apellido: str = Query(..., min_length=1, max_length=100),
+    rango: str = Query(..., min_length=1, max_length=50),
+    unidad: str = Query(..., min_length=1, max_length=100),
     usuario_id: int = Depends(get_usuario_id),
     session: Session = Depends(get_session)
 ):
@@ -289,8 +332,8 @@ def eliminar_soldado_endpoint(
 
 @app.post("/puntos/crear")
 def crear_punto_endpoint(
-    nombre: str,
-    descripcion: str = "",
+    nombre: str = Query(..., min_length=1, max_length=100),
+    descripcion: str = Query(default="", max_length=500),
     usuario_id: int = Depends(get_usuario_id),
     session: Session = Depends(get_session)
 ):
@@ -299,8 +342,8 @@ def crear_punto_endpoint(
 @app.put("/puntos/editar/{id_punto}")
 def editar_punto_endpoint(
     id_punto: int,
-    nombre: str,
-    descripcion: str = "",
+    nombre: str = Query(..., min_length=1, max_length=100),
+    descripcion: str = Query(default="", max_length=500),
     usuario_id: int = Depends(get_usuario_id),
     session: Session = Depends(get_session)
 ):
@@ -325,7 +368,12 @@ def listar_puntos_endpoint(usuario_id: int = Depends(get_usuario_id), session: S
     return listar_puntos(usuario_id, session)
 
 @app.get("/exportar-pdf/{mes}/{ano}")
-def exportar_pdf(mes: int, ano: int, usuario_id: int = Depends(get_usuario_id), session: Session = Depends(get_session)):
+def exportar_pdf(
+    mes: int = Path(..., ge=1, le=12),
+    ano: int = Path(..., ge=2020, le=2100),
+    usuario_id: int = Depends(get_usuario_id),
+    session: Session = Depends(get_session)
+):
     pdf_buffer = generar_pdf(mes, ano, usuario_id, session)
     return Response(
         content=pdf_buffer.getvalue(),
@@ -336,39 +384,45 @@ def exportar_pdf(mes: int, ano: int, usuario_id: int = Depends(get_usuario_id), 
 @app.post("/novedades")
 def crear_novedad_endpoint(
     id_asignacion: int,
-    descripcion: str = "Sin novedad",
+    descripcion: str = Query(default="Sin novedad", max_length=1000),
     usuario_id: int = Depends(get_usuario_id),
     session: Session = Depends(get_session)
 ):
-    return crear_novedad(id_asignacion, descripcion, session)
+    return crear_novedad(id_asignacion, descripcion, usuario_id, session)
 
 
 @app.get("/novedades/{mes}/{ano}")
 def listar_novedades_endpoint(
-    mes: int,
-    ano: int,
+    mes: int = Path(..., ge=1, le=12),
+    ano: int = Path(..., ge=2020, le=2100),
     usuario_id: int = Depends(get_usuario_id),
     session: Session = Depends(get_session)
 ):
     return listar_novedades(mes, ano, usuario_id, session)
 
 @app.get("/estadisticas/{mes}/{ano}")
-def estadisticas_endpoint(mes: int, ano: int, meses: int = 1, usuario_id: int = Depends(get_usuario_id), session: Session = Depends(get_session)):
+def estadisticas_endpoint(
+    mes: int = Path(..., ge=1, le=12),
+    ano: int = Path(..., ge=2020, le=2100),
+    meses: int = Query(default=1, ge=1, le=12),
+    usuario_id: int = Depends(get_usuario_id),
+    session: Session = Depends(get_session)
+):
     return obtener_estadisticas(mes, ano, usuario_id, session, meses)
 
 @app.get("/historial-sustituciones/{mes}/{ano}")
 def historial_sustituciones_endpoint(
-    mes: int,
-    ano: int,
+    mes: int = Path(..., ge=1, le=12),
+    ano: int = Path(..., ge=2020, le=2100),
     usuario_id: int = Depends(get_usuario_id),
     session: Session = Depends(get_session)
 ):
-    return obtener_historial_sustituciones(mes, ano, session)
+    return obtener_historial_sustituciones(mes, ano, usuario_id, session)
 
 @app.post("/difundir/{mes}/{ano}")
 async def difundir_endpoint(
-    mes: int,
-    ano: int,
+    mes: int = Path(..., ge=1, le=12),
+    ano: int = Path(..., ge=2020, le=2100),
     usuario_id: int = Depends(get_usuario_id),
     session: Session = Depends(get_session)
 ):
@@ -376,7 +430,11 @@ async def difundir_endpoint(
 
 
 @app.post("/login")
-def login(username: str, password: str, session: Session = Depends(get_session)):
+def login(
+    username: str = Query(..., min_length=5, max_length=50),
+    password: str = Query(..., min_length=8, max_length=100),
+    session: Session = Depends(get_session)
+):
     if len(username) < 5 or len(password) < 8 or username == password:
         return {"error": "Credenciales inv\u00e1lidas"}
     usuario = session.exec(select(Usuario).where(Usuario.username == username)).first()
@@ -390,7 +448,11 @@ def login(username: str, password: str, session: Session = Depends(get_session))
 
 
 @app.post("/register")
-def register(username: str, password: str, session: Session = Depends(get_session)):
+def register(
+    username: str = Query(..., min_length=5, max_length=50),
+    password: str = Query(..., min_length=8, max_length=100),
+    session: Session = Depends(get_session)
+):
     if len(username) < 5:
         return {"error": "El usuario debe tener al menos 5 caracteres"}
     if len(password) < 8:
@@ -415,7 +477,10 @@ def register(username: str, password: str, session: Session = Depends(get_sessio
 
 
 @app.post("/logout")
-def logout(token: str, session: Session = Depends(get_session)):
+def logout(authorization: str = Header(..., alias="Authorization"), session: Session = Depends(get_session)):
+    if not authorization.startswith("Bearer "):
+        return {"error": "Sesión inválida"}
+    token = authorization[len("Bearer "):]
     sesion = session.exec(select(Sesion).where(Sesion.token == token, Sesion.activa)).first()
     if sesion:
         sesion.activa = False
@@ -424,7 +489,10 @@ def logout(token: str, session: Session = Depends(get_session)):
 
 
 @app.get("/verificar-sesion")
-def verificar_sesion(token: str, session: Session = Depends(get_session)):
+def verificar_sesion(authorization: str = Header(..., alias="Authorization"), session: Session = Depends(get_session)):
+    if not authorization.startswith("Bearer "):
+        return {"valido": False}
+    token = authorization[len("Bearer "):]
     sesion = session.exec(select(Sesion).where(Sesion.token == token, Sesion.activa)).first()
     if not sesion:
         return {"valido": False}
