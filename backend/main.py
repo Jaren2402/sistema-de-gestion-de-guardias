@@ -1,26 +1,15 @@
 import hashlib
 import io
-import traceback
 import uuid
 from contextlib import asynccontextmanager
 from datetime import date, datetime
 
 import pandas as pd
 from database import crear_tablas, get_session
-from logger import log_error, log_info, setup_logging
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Path, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, Response
-from schemas import (
-    LoginRequest,
-    NovedadCreate,
-    PuntoCreate,
-    PuntoUpdate,
-    RegisterRequest,
-    RestriccionCreate,
-    SoldadoCreate,
-    SoldadoUpdate,
-)
+from logger import log_error, log_info, setup_logging
 from models import PuntoGuardia, Restriccion, Sesion, Soldado, Usuario
 from services import (
     actualizar_soldado,
