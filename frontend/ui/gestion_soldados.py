@@ -107,7 +107,7 @@ def build(page: ft.Page):
         try:
             async with httpx.AsyncClient() as cliente:
                 token = get_token(page)
-                resp = await cliente.get(f"{URL_BACKEND}/soldados", params={"token": token})
+                resp = await cliente.get(f"{URL_BACKEND}/soldados", headers={"Authorization": f"Bearer {token}"})
                 _datos = resp.json()
                 _filtrar()
                 texto_estado.value = ""
@@ -164,12 +164,14 @@ def build(page: ft.Page):
                 if id_edicion.value:
                     resp = await cliente.put(
                         f"{URL_BACKEND}/soldados/editar/{id_edicion.value}",
-                        params={**datos, "token": token},
+                        params=datos,
+                        headers={"Authorization": f"Bearer {token}"},
                     )
                 else:
                     resp = await cliente.post(
                         f"{URL_BACKEND}/soldados/crear",
-                        params={**datos, "token": token},
+                        params=datos,
+                        headers={"Authorization": f"Bearer {token}"},
                     )
                 resultado = resp.json()
                 if "error" in resultado:
@@ -190,7 +192,7 @@ def build(page: ft.Page):
         try:
             async with httpx.AsyncClient() as cliente:
                 token = get_token(page)
-                resp = await cliente.delete(f"{URL_BACKEND}/soldados/eliminar/{id_soldado}", params={"token": token})
+                resp = await cliente.delete(f"{URL_BACKEND}/soldados/eliminar/{id_soldado}", headers={"Authorization": f"Bearer {token}"})
                 resultado = resp.json()
                 if "error" in resultado:
                     texto_estado.value = f"{resultado['error']}"

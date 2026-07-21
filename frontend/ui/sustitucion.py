@@ -127,7 +127,7 @@ def build(page: ft.Page, on_sustitucion_completada=None):
         try:
             async with httpx.AsyncClient() as cliente:
                 token = get_token(page)
-                resp = await cliente.get(f"{URL_BACKEND}/calendario-ver/{ano}/{mes}", params={"token": token})
+                resp = await cliente.get(f"{URL_BACKEND}/calendario-ver/{ano}/{mes}", headers={"Authorization": f"Bearer {token}"})
                 datos = resp.json()
                 nonlocal _asignaciones
                 _asignaciones = datos.get("asignaciones", [])
@@ -164,7 +164,8 @@ def build(page: ft.Page, on_sustitucion_completada=None):
                 token = get_token(page)
                 resp = await cliente.post(
                     f"{URL_BACKEND}/sustituir-guardia",
-                    params={"id_asignacion_original": id_asig, "token": token}
+                    params={"id_asignacion_original": id_asig},
+                    headers={"Authorization": f"Bearer {token}"}
                 )
                 datos = resp.json()
 
@@ -338,7 +339,8 @@ def build(page: ft.Page, on_sustitucion_completada=None):
                                     resp = await cli.post(
                                         f"{URL_BACKEND}/confirmar-trueque",
                                         params={"id_asignacion_a": id_asig, "id_asignacion_b": id_ab,
-                                                "id_soldado_b": id_sb, "motivo": motivo, "token": token}
+                                                "id_soldado_b": id_sb, "motivo": motivo},
+                                        headers={"Authorization": f"Bearer {token}"}
                                     )
                                     data = resp.json()
                                     if "error" in data:
@@ -404,7 +406,8 @@ def build(page: ft.Page, on_sustitucion_completada=None):
                                     resp = await cli.post(
                                         f"{URL_BACKEND}/confirmar-sustitucion",
                                         params={"id_asignacion_original": id_asig,
-                                                "id_nuevo_soldado": id_s, "motivo": motivo, "token": token}
+                                                "id_nuevo_soldado": id_s, "motivo": motivo},
+                                        headers={"Authorization": f"Bearer {token}"}
                                     )
                                     data = resp.json()
                                     if "error" in data:

@@ -299,7 +299,7 @@ async def main(page: ft.Page):
         if token:
             try:
                 async with httpx.AsyncClient() as cli:
-                    await cli.post(f"{URL_BACKEND}/logout", params={"token": token})
+                    await cli.post(f"{URL_BACKEND}/logout", headers={"Authorization": f"Bearer {token}"})
             except Exception:
                 pass
         page.session.store.remove("session_token")
@@ -319,7 +319,7 @@ async def main(page: ft.Page):
     if token:
         try:
             async with httpx.AsyncClient() as cli:
-                resp = await cli.get(f"{URL_BACKEND}/verificar-sesion", params={"token": token})
+                resp = await cli.get(f"{URL_BACKEND}/verificar-sesion", headers={"Authorization": f"Bearer {token}"})
                 sesion_valida = resp.json().get("valido", False)
         except Exception:
             pass

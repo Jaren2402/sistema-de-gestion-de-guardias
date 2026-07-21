@@ -53,7 +53,7 @@ def build(page: ft.Page):
             try:
                 async with httpx.AsyncClient() as cliente:
                     token = get_token(page)
-                    resp = await cliente.get(f"{URL_BACKEND}/soldados", params={"token": token})
+                    resp = await cliente.get(f"{URL_BACKEND}/soldados", headers={"Authorization": f"Bearer {token}"})
                     datos = resp.json()
                     if datos:
                         selector_soldado.options = [
@@ -91,7 +91,7 @@ def build(page: ft.Page):
         try:
             async with httpx.AsyncClient() as cliente:
                 token = get_token(page)
-                resp = await cliente.get(f"{URL_BACKEND}/ficha-soldado-ver/{id_soldado}/{mes}/{año}", params={"token": token})
+                resp = await cliente.get(f"{URL_BACKEND}/ficha-soldado-ver/{id_soldado}/{mes}/{año}", headers={"Authorization": f"Bearer {token}"})
                 datos = resp.json()
 
                 guardias = datos.get("guardias", [])
