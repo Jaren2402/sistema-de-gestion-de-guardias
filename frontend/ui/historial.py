@@ -178,11 +178,15 @@ def build(page: ft.Page):
             async with httpx.AsyncClient() as cliente:
                 token = get_token(page)
                 resp = await cliente.get(f"{URL_BACKEND}/historial-sustituciones/{mes}/{ano}", headers={"Authorization": f"Bearer {token}"})
+                if resp.status_code != 200:
+                    toast(page, "Error al cargar el historial.", "error")
+                    return
                 datos = resp.json()
                 nonlocal _todos_los_registros
-                _todos_los_registros = datos if datos else []
+                _todos_los_registros = datos if isinstance(datos, list) else []
                 _filtrar()
-        except Exception:
+        except Exception as ex:
+            print(f"[historial] Error: {ex}")
             toast(page, "Error al cargar el historial.", "error")
         finally:
             barra_loading.visible = False

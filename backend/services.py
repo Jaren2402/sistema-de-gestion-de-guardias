@@ -1099,92 +1099,95 @@ def obtener_estadisticas(mes: int, año: int, usuario_id: int, session: Session,
     }
 
 def obtener_historial_sustituciones(mes: int, año: int, usuario_id: int, session: Session) -> list:
-    inicio = datetime(año, mes, 1)
-    if mes == 12:
-        proximo_mes = datetime(año + 1, 1, 1)
-    else:
-        proximo_mes = datetime(año, mes + 1, 1)
-
-    # --- 1. Sustituciones simples ---
-    query = (
-        select(Asignacion, Guardia, Soldado, PuntoGuardia)
-        .join(Guardia, Asignacion.id_guardia == Guardia.id_guardia)
-        .join(Soldado, Asignacion.id_soldado == Soldado.id_soldado)
-        .join(PuntoGuardia, Guardia.id_punto == PuntoGuardia.id_punto)
-        .where(
-            Guardia.fecha_inicio >= inicio,
-            Guardia.fecha_inicio < proximo_mes,
-            Asignacion.id_asignacion_original.isnot(None),
-            PuntoGuardia.id_usuario == usuario_id,
-        )
-        .order_by(Guardia.fecha_inicio.desc())
-    )
-    resultados = session.exec(query).all()
-
-    historial = []
-    for asignacion, guardia, soldado, punto in resultados:
-        asignacion_original = session.get(Asignacion, asignacion.id_asignacion_original)
-        if not asignacion_original:
-            continue
-        if asignacion_original.es_anulada:
-            soldado_original = session.get(Soldado, asignacion_original.id_soldado)
-            titular_original = f"{soldado_original.nombre} {soldado_original.apellido}" if soldado_original else ""
-            novedad = session.exec(
-                select(Novedad).where(Novedad.id_asignacion == asignacion.id_asignacion)
-            ).first()
-            motivo = ""
-            if novedad and novedad.descripcion.startswith("SUSTITUCIÓN:"):
-                motivo = novedad.descripcion[len("SUSTITUCIÓN:"):].strip()
-            historial.append({
-                "fecha": guardia.fecha_inicio.strftime("%Y-%m-%d"),
-                "turno": guardia.tipo,
-                "punto": punto.nombre,
-                "titular_original": titular_original,
-                "sustituto": f"{soldado.nombre} {soldado.apellido}",
-                "cedula_sustituto": soldado.cedula,
-                "tipo": "Simple",
-                "id_asignacion": asignacion.id_asignacion,
-                "motivo": motivo,
-            })
-
-    # --- 2. Trueques (novedades enriquecidas) ---
-    novedades_trueque = session.exec(
-        select(Novedad)
-        .join(Asignacion, Novedad.id_asignacion == Asignacion.id_asignacion)
-        .join(Guardia, Asignacion.id_guardia == Guardia.id_guardia)
-        .join(PuntoGuardia, Guardia.id_punto == PuntoGuardia.id_punto)
-        .where(
-            Novedad.fecha_reporte >= inicio,
-            Novedad.fecha_reporte < proximo_mes,
-            Novedad.descripcion.startswith("TRUEQUE:"),
-            PuntoGuardia.id_usuario == usuario_id,
-        )
-    ).all()
-
-    for nov in novedades_trueque:
-        texto = nov.descripcion[len("TRUEQUE:"):]
-        # Obtener datos de la guardia asociada
-        asignacion = session.get(Asignacion, nov.id_asignacion)
-        if asignacion:
-            guardia = session.get(Guardia, asignacion.id_guardia)
-            punto = session.get(PuntoGuardia, guardia.id_punto) if guardia else None
-            historial.append({
-                "tipo": "Trueque",
-                "texto_trueque": texto,
-                "fecha": guardia.fecha_inicio.strftime("%Y-%m-%d") if guardia else "",
-                "turno": guardia.tipo if guardia else "",
-                "punto": punto.nombre if punto else "",
-            })
+    try:
+        inicio = datetime(año, mes, 1)
+        if mes == 12:
+            proximo_mes = datetime(año + 1, 1, 1)
         else:
-            historial.append({
-                "tipo": "Trueque",
-                "texto_trueque": texto,
-                "fecha": "",
-                "turno": "",
-                "punto": "",
-            })
+            proximo_mes = datetime(año, mes + 1, 1)
 
-    return historial
+        # --- 1. Sustituciones simples ---
+        query = (
+            select(Asignacion, Guardia, Soldado, PuntoGuardia)
+            .join(Guardia, Asignacion.id_guardia == Guardia.id_guardia)
+            .join(Soldado, Asignacion.id_soldado == Soldado.id_soldado)
+            .join(PuntoGuardia, Guardia.id_punto == PuntoGuardia.id_punto)
+            .where(
+                Guardia.fecha_inicio >= inicio,
+                Guardia.fecha_inicio < proximo_mes,
+                Asignacion.id_asignacion_original.isnot(None),
+                PuntoGuardia.id_usuario == usuario_id,
+            )
+            .order_by(Guardia.fecha_inicio.desc())
+        )
+        resultados = session.exec(query).all()
+
+        historial = []
+        for asignacion, guardia, soldado, punto in resultados:
+            asignacion_original = session.get(Asignacion, asignacion.id_asignacion_original)
+            if not asignacion_original:
+                continue
+            if asignacion_original.es_anulada:
+                soldado_original = session.get(Soldado, asignacion_original.id_soldado)
+                titular_original = f"{soldado_original.nombre} {soldado_original.apellido}" if soldado_original else ""
+                novedad = session.exec(
+                    select(Novedad).where(Novedad.id_asignacion == asignacion.id_asignacion)
+                ).first()
+                motivo = ""
+                if novedad and novedad.descripcion and novedad.descripcion.startswith("SUSTITUCIÓN:"):
+                    motivo = novedad.descripcion[len("SUSTITUCIÓN:"):].strip()
+                historial.append({
+                    "fecha": guardia.fecha_inicio.strftime("%Y-%m-%d"),
+                    "turno": guardia.tipo,
+                    "punto": punto.nombre,
+                    "titular_original": titular_original,
+                    "sustituto": f"{soldado.nombre} {soldado.apellido}",
+                    "cedula_sustituto": soldado.cedula,
+                    "tipo": "Simple",
+                    "id_asignacion": asignacion.id_asignacion,
+                    "motivo": motivo,
+                })
+
+        # --- 2. Trueques (novedades enriquecidas) ---
+        novedades_trueque = session.exec(
+            select(Novedad)
+            .join(Asignacion, Novedad.id_asignacion == Asignacion.id_asignacion)
+            .join(Guardia, Asignacion.id_guardia == Guardia.id_guardia)
+            .join(PuntoGuardia, Guardia.id_punto == PuntoGuardia.id_punto)
+            .where(
+                Novedad.fecha_reporte >= inicio,
+                Novedad.fecha_reporte < proximo_mes,
+                Novedad.descripcion.startswith("TRUEQUE:"),
+                PuntoGuardia.id_usuario == usuario_id,
+            )
+        ).all()
+
+        for nov in novedades_trueque:
+            texto = nov.descripcion[len("TRUEQUE:"):] if nov.descripcion else ""
+            asignacion = session.get(Asignacion, nov.id_asignacion)
+            if asignacion:
+                guardia = session.get(Guardia, asignacion.id_guardia)
+                punto = session.get(PuntoGuardia, guardia.id_punto) if guardia else None
+                historial.append({
+                    "tipo": "Trueque",
+                    "texto_trueque": texto,
+                    "fecha": guardia.fecha_inicio.strftime("%Y-%m-%d") if guardia else "",
+                    "turno": guardia.tipo if guardia else "",
+                    "punto": punto.nombre if punto else "",
+                })
+            else:
+                historial.append({
+                    "tipo": "Trueque",
+                    "texto_trueque": texto,
+                    "fecha": "",
+                    "turno": "",
+                    "punto": "",
+                })
+
+        return historial
+    except Exception as ex:
+        _log_error("obtener_historial_sustituciones", ex)
+        return []
 
 async def difundir_pdf(mes: int, año: int, usuario_id: int, session: Session) -> dict:
     pdf_buffer = generar_pdf(mes, año, usuario_id, session)
