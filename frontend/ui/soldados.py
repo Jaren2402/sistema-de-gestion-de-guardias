@@ -89,9 +89,6 @@ def build(page: ft.Page, on_soldados_actualizados=None, on_ver_ficha=None):
 
     texto_estado = ft.Text()
 
-    kpi_total = ft.Text("0", size=28, weight=ft.FontWeight.BOLD, color=TEXT)
-    kpi_rangos = ft.Column(spacing=0, scroll=ft.ScrollMode.ADAPTIVE)
-
     kpi_row = ft.Row(
         [_build_kpi_card(ft.Icons.PEOPLE, "Total Soldados", "0", PRIMARY)],
         spacing=12,
@@ -415,7 +412,6 @@ def build(page: ft.Page, on_soldados_actualizados=None, on_ver_ficha=None):
 
                 def _make_edit(row_idx, ced, nom, ape, run, uni):
                     def _edit(e):
-                        fields = _row_widgets.get(row_idx, {})
                         for ctrl in [ced, nom, ape, run, uni]:
                             ctrl.focus()
                             break

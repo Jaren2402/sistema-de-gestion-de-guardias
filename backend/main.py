@@ -11,6 +11,7 @@ from fastapi import Depends, FastAPI, File, Header, HTTPException, Path, Query, 
 from fastapi.responses import JSONResponse, Response
 from logger import log_error, log_info, setup_logging
 from models import PuntoGuardia, Restriccion, Sesion, Soldado, Usuario
+from pydantic import BaseModel
 from services import (
     actualizar_soldado,
     buscar_candidatos_sustitucion,
@@ -80,7 +81,6 @@ def health(session: Session = Depends(get_session)):
     }
 
 
-from pydantic import BaseModel
 
 RANGOS_VALIDOS = {
     "cabo segundo", "cabo primero", "sargento segundo",

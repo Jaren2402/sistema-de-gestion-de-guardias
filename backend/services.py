@@ -5,7 +5,6 @@ from datetime import datetime, timedelta
 
 # Imports para el PDF
 from io import BytesIO
-from typing import Tuple
 
 import httpx
 from models import Asignacion, Guardia, Novedad, PuntoGuardia, Restriccion, Soldado

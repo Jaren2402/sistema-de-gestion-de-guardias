@@ -69,7 +69,6 @@ def build(page: ft.Page):
         expand=True,
     )
 
-    texto_estado = ft.Text()
     selector_soldado = ft.Dropdown(
         label="Soldado", options=[], width=320,
         text_style=ft.TextStyle(color=TEXT_TABLE, size=13),
@@ -92,11 +91,6 @@ def build(page: ft.Page):
         border_color=DIVIDER, focused_border_color=PRIMARY,
         cursor_color=PRIMARY,
     )
-
-    kpi_total = ft.Text("0", size=24, weight=ft.FontWeight.BOLD, color=TEXT)
-    kpi_puntos = ft.Text("0", size=24, weight=ft.FontWeight.BOLD, color=TEXT)
-    kpi_diurnos = ft.Text("0", size=24, weight=ft.FontWeight.BOLD, color=TEXT)
-    kpi_nocturnos = ft.Text("0", size=24, weight=ft.FontWeight.BOLD, color=TEXT)
 
     kpi_row = ft.Row(
         [

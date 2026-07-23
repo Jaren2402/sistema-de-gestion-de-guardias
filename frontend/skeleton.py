@@ -1,23 +1,16 @@
 import calendar as cal_module
+
 import flet as ft
 from theme import (
     BTN_BG,
     BTN_DANGER,
     CAL_BG,
-    CAL_BORDER,
     CAL_CELL,
     CAL_CELL_EMPTY,
-    CAL_CELL_HEIGHT,
     CAL_CELL_HOVER,
     CAL_DAY_TEXT,
-    CAL_DAY_TODAY,
-    CAL_GRADIENT_END,
-    CAL_GRADIENT_START,
-    CAL_GLOW,
     CAL_HEADER_HEIGHT,
     CAL_HEADER_TEXT,
-    CAL_PAST_BG,
-    CAL_PAST_TEXT,
     ERROR,
     HOVER_ROW_BG,
     HOVER_ROW_TEXT,
@@ -297,10 +290,6 @@ def calendar_cell(dia, asignaciones, on_click=None, month=None, year=None, highl
         )
 
     now = __import__("datetime").datetime.now()
-    is_past = (
-        month is not None and year is not None
-        and (year < now.year or (year == now.year and month < now.month) or (year == now.year and month == now.month and dia < now.day))
-    )
     is_today = dia == now.day and month == now.month and year == now.year
 
     day_color = CAL_DAY_TEXT
