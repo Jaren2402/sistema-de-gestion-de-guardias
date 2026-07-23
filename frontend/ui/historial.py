@@ -131,7 +131,7 @@ def build(page: ft.Page):
             bgcolor=SURFACE,
             border_radius=12,
             padding=ft.Padding(16, 14, 16, 14),
-            height=130,
+            height=120,
             expand=True,
             animate=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
         )
