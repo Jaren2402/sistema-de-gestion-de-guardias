@@ -108,7 +108,7 @@ def build(page: ft.Page):
         else:
             badge_bg = BTN_BG
             badge_text = "SUSTITUCIÓN"
-            icono = ft.Icons.REPLACE_TRAIL
+            icono = ft.Icons.FIND_REPLACE
             icono_color = BTN_BG
             titulo = f'{item["fecha"]}  ·  {item["turno"].capitalize()}  ·  {item["punto"]}'
             sub_lineas = [
