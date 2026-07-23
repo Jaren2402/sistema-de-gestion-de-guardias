@@ -1,5 +1,4 @@
 import asyncio
-import traceback
 
 import flet as ft
 import httpx
@@ -107,6 +106,8 @@ async def main(page: ft.Page):
                 panel_scroll.controls.append(paneles[idx]["panel"])
                 panel_wrapper.opacity = 1
                 page.update()
+                if idx == 7:
+                    await mod_sustitucion["cargar"]()
                 if idx == 8:
                     await mod_dashboard["cargar"]()
 
@@ -287,10 +288,10 @@ async def main(page: ft.Page):
             page.run_task(mod_ficha["cargar_dropdown"])
             page.run_task(mod_gestion["cargar_tabla"])
             page.run_task(mod_puntos["cargar_tabla"])
-        except Exception as ex:
+        except Exception:
             page.add(ft.Container(
-                ft.Text(f"Error: {ex}\n\n{traceback.format_exc()}",
-                        color=ft.Colors.RED, size=14, selectable=True),
+                ft.Text("Error inesperado. Recargue la página o inicie sesión nuevamente.",
+                        color=ft.Colors.RED, size=14),
                 padding=30, bgcolor="#111", expand=True))
             page.update()
 

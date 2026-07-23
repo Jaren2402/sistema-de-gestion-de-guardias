@@ -4,73 +4,82 @@ import flet as ft
 import httpx
 from api import get_token
 from config import URL_BACKEND
-from skeleton import hover_row, loading_bar, module_header, no_data
-from skeleton import table_row as sk_row
+from skeleton import confirm_dialog, loading_bar, module_header, no_data, toast
 from theme import *
+
+_CARD_SHADOW = [ft.BoxShadow(blur_radius=8, color="#000000", spread_radius=0, offset=ft.Offset(0, 3))]
+_EXP = [1, 2, 2, 1, 1, 1]
+
+
+def _field_style():
+    return dict(
+        text_style=ft.TextStyle(color=TEXT_TABLE, size=13),
+        label_style=ft.TextStyle(color=TEXT_SECONDARY),
+        border_color=DIVIDER,
+        focused_border_color=PRIMARY,
+        cursor_color=PRIMARY,
+    )
 
 
 def build(page: ft.Page):
-    """Construye el formulario de creación y edición de soldados (CRUD completo)."""
     _datos = []
-    texto_estado = ft.Text()
-    campo_cedula = ft.TextField(label="C\u00e9dula", width=150)
-    campo_nombre = ft.TextField(label="Nombre", width=200)
-    campo_apellido = ft.TextField(label="Apellido", width=200)
+    _id_edicion = None
+    barra_loading = loading_bar()
+
+    campo_cedula = ft.TextField(label="Cédula", expand=True, **_field_style())
+    campo_nombre = ft.TextField(label="Nombre", expand=True, **_field_style())
+    campo_apellido = ft.TextField(label="Apellido", expand=True, **_field_style())
     campo_rango = ft.Dropdown(
-        label="Rango",
+        label="Rango", expand=True,
         options=[ft.dropdown.Option(r) for r in [
             "cabo segundo", "cabo primero", "sargento segundo",
             "sargento primero", "sargento mayor", "teniente",
-            "primer teniente", "capit\u00e1n"
+            "primer teniente", "capitán",
         ]],
-        width=180,
+        text_style=ft.TextStyle(color=TEXT_TABLE, size=13),
+        label_style=ft.TextStyle(color=TEXT_SECONDARY),
+        border_color=DIVIDER, focused_border_color=PRIMARY,
     )
-    campo_unidad = ft.TextField(label="Unidad", width=200)
-    id_edicion = ft.TextField(label="ID (solo lectura)", visible=False, disabled=True, width=100)
-
-    _exp = [1, 2, 2, 1, 1, 1]
-
-    barra_loading = loading_bar()
-    body = ft.Column(controls=[sk_row(_exp) for _ in range(6)], scroll=ft.ScrollMode.ADAPTIVE, expand=True, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
-
-    header = ft.Container(
-        content=ft.Row([
-            ft.Container(ft.Text("C\u00c9DULA", size=16, color=TEXT_TABLE, weight=ft.FontWeight.BOLD), expand=_exp[0]),
-            ft.Container(ft.Text("NOMBRE", size=16, color=TEXT_TABLE, weight=ft.FontWeight.BOLD), expand=_exp[1]),
-            ft.Container(ft.Text("APELLIDO", size=16, color=TEXT_TABLE, weight=ft.FontWeight.BOLD), expand=_exp[2]),
-            ft.Container(ft.Text("RANGO", size=16, color=TEXT_TABLE, weight=ft.FontWeight.BOLD), expand=_exp[3]),
-            ft.Container(ft.Text("UNIDAD", size=16, color=TEXT_TABLE, weight=ft.FontWeight.BOLD), expand=_exp[4]),
-            ft.Container(ft.Text("ACCIONES", size=16, color=TEXT_TABLE, weight=ft.FontWeight.BOLD), expand=_exp[5]),
-        ]),
-        bgcolor=SURFACE_LIGHT,
-        padding=ft.Padding(left=16, top=12, right=16, bottom=12),
-    )
-
-    tabla_container = ft.Container(
-        content=ft.Column([header, body]),
-        expand=True,
-        bgcolor=TABLE_BG,
-        border_radius=10,
-        clip_behavior=ft.ClipBehavior.HARD_EDGE,
-    )
-
-    no_data_container = no_data(ft.Icons.MANAGE_ACCOUNTS, "No hay soldados. Cree uno desde el formulario.")
-    cont_tabla = ft.Row([
-        ft.Container(expand=1),
-        ft.Container(content=tabla_container, expand=6, padding=ft.Padding(left=20, right=20, top=10, bottom=10)),
-        ft.Container(expand=1),
-    ], expand=True, visible=False)
+    campo_unidad = ft.TextField(label="Unidad", expand=True, **_field_style())
 
     txt_buscar = ft.TextField(
         label="Buscar soldado",
-        hint_text="Nombre, c\u00e9dula o rango",
+        hint_text="Nombre, cédula o rango",
         prefix_icon=ft.Icons.SEARCH,
         width=300,
         on_change=lambda e: _filtrar(),
+        **_field_style(),
     )
 
+    body = ft.Column(
+        controls=[], scroll=ft.ScrollMode.ADAPTIVE, expand=True,
+        horizontal_alignment=ft.CrossAxisAlignment.STRETCH, spacing=4,
+    )
+
+    header_row = ft.Container(
+        content=ft.Row([
+            ft.Container(ft.Text("CÉDULA", size=12, color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD), expand=_EXP[0], alignment=ft.Alignment(-1, 0)),
+            ft.Container(ft.Text("NOMBRE", size=12, color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD), expand=_EXP[1], alignment=ft.Alignment(-1, 0)),
+            ft.Container(ft.Text("APELLIDO", size=12, color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD), expand=_EXP[2], alignment=ft.Alignment(-1, 0)),
+            ft.Container(ft.Text("RANGO", size=12, color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD), expand=_EXP[3], alignment=ft.Alignment(-1, 0)),
+            ft.Container(ft.Text("UNIDAD", size=12, color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD), expand=_EXP[4], alignment=ft.Alignment(-1, 0)),
+            ft.Container(ft.Text("ACCIONES", size=12, color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD), expand=_EXP[5], alignment=ft.Alignment(-1, 0)),
+        ]),
+        bgcolor=BTN_BG,
+        border_radius=ft.BorderRadius(top_left=10, top_right=10, bottom_left=0, bottom_right=0),
+        padding=ft.Padding(16, 10, 16, 10),
+    )
+
+    tabla_container = ft.Container(
+        content=ft.Column([header_row, body]),
+        expand=True,
+    )
+
+    no_data_container = no_data(ft.Icons.MANAGE_ACCOUNTS, "No hay soldados. Cree uno desde el formulario.")
+    cont_tabla = ft.Container(content=tabla_container, expand=True, visible=False)
+
     def _filtrar():
-        q = txt_buscar.value.strip().lower()
+        q = (txt_buscar.value or "").strip().lower()
         filtrados = [s for s in _datos
                      if not q or q in s["cedula"].lower()
                      or q in s["nombre"].lower()
@@ -78,22 +87,46 @@ def build(page: ft.Page):
                      or q in s["rango"].lower()]
         body.controls.clear()
         for s in filtrados:
-            body.controls.append(hover_row(ft.Container(
+            btn_editar = ft.IconButton(
+                icon=ft.Icons.EDIT_OUTLINED, icon_color=TEXT_SECONDARY, icon_size=18,
+                tooltip="Editar", data=s, on_click=seleccionar_para_editar,
+            )
+            btn_eliminar = ft.IconButton(
+                icon=ft.Icons.DELETE_OUTLINE, icon_color=TEXT_SECONDARY, icon_size=18,
+                tooltip="Eliminar", data=s, on_click=eliminar_soldado,
+            )
+
+            row = ft.Container(
                 content=ft.Row([
-                    ft.Container(ft.Text(s["cedula"], size=16, color=TEXT_TABLE), expand=_exp[0]),
-                    ft.Container(ft.Text(s["nombre"], size=16, color=TEXT_TABLE), expand=_exp[1]),
-                    ft.Container(ft.Text(s["apellido"], size=16, color=TEXT_TABLE), expand=_exp[2]),
-                    ft.Container(ft.Text(s["rango"], size=16, color=TEXT_TABLE), expand=_exp[3]),
-                    ft.Container(ft.Text(s["unidad"], size=16, color=TEXT_TABLE), expand=_exp[4]),
-                    ft.Container(ft.Row([
-                        ft.IconButton(icon=ft.Icons.EDIT, tooltip="Editar", data=s, on_click=seleccionar_para_editar),
-                        ft.IconButton(icon=ft.Icons.DELETE, tooltip="Eliminar", data=s["id_soldado"], on_click=eliminar_soldado),
-                    ]), expand=_exp[5]),
+                    ft.Container(ft.Text(s["cedula"], size=14, color=TEXT_TABLE, weight=ft.FontWeight.W_500), expand=_EXP[0], alignment=ft.Alignment(-1, 0)),
+                    ft.Container(ft.Text(s["nombre"], size=14, color=TEXT_TABLE, weight=ft.FontWeight.W_500), expand=_EXP[1], alignment=ft.Alignment(-1, 0)),
+                    ft.Container(ft.Text(s["apellido"], size=14, color=TEXT_TABLE, weight=ft.FontWeight.W_500), expand=_EXP[2], alignment=ft.Alignment(-1, 0)),
+                    ft.Container(ft.Text(s["rango"].capitalize(), size=14, color=TEXT_TABLE, weight=ft.FontWeight.W_500), expand=_EXP[3], alignment=ft.Alignment(-1, 0)),
+                    ft.Container(ft.Text(s["unidad"], size=14, color=TEXT_TABLE, weight=ft.FontWeight.W_500), expand=_EXP[4], alignment=ft.Alignment(-1, 0)),
+                    ft.Container(ft.Row([btn_editar, btn_eliminar], spacing=0), expand=_EXP[5], alignment=ft.Alignment(-1, 0)),
                 ]),
-                bgcolor=TABLE_ROW,
-                height=40,
-                padding=ft.Padding(left=16, top=0, right=16, bottom=0),
-            )))
+                bgcolor=SURFACE,
+                height=56,
+                padding=ft.Padding(16, 0, 16, 0),
+                border_radius=10,
+            )
+
+            def _make_hover(c):
+                def _on_hover(e):
+                    if e.data:
+                        c.bgcolor = HOVER_ROW_BG
+                        c.shadow = [ft.BoxShadow(blur_radius=8, color="#000000", spread_radius=0, offset=ft.Offset(0, 2))]
+                        c.scale = ft.Scale(1.005)
+                    else:
+                        c.bgcolor = SURFACE
+                        c.shadow = []
+                        c.scale = ft.Scale(1.0)
+                    c.update()
+                return _on_hover
+
+            row.on_hover = _make_hover(row)
+            body.controls.append(row)
+
         hay = len(filtrados) > 0
         cont_tabla.visible = hay
         no_data_container.visible = not hay
@@ -107,47 +140,48 @@ def build(page: ft.Page):
         try:
             async with httpx.AsyncClient() as cliente:
                 token = get_token(page)
-                resp = await cliente.get(f"{URL_BACKEND}/soldados", headers={"Authorization": f"Bearer {token}"})
+                resp = await cliente.get(
+                    f"{URL_BACKEND}/soldados",
+                    headers={"Authorization": f"Bearer {token}"},
+                )
                 _datos = resp.json()
                 _filtrar()
-                texto_estado.value = ""
-        except Exception as ex:
-            texto_estado.value = f"Error al cargar: {ex}"
-            texto_estado.color = ft.Colors.RED
+        except Exception:
+            toast(page, "Error al cargar soldados.", "error")
             body.controls.clear()
-            body.controls.append(
-                ft.Container(ft.Text(f"Error: {ex}", italic=True, color=TEXT_SECONDARY, size=14),
-                             alignment=ft.Alignment(0, 0), padding=20))
+            cont_tabla.visible = False
+            no_data_container.visible = True
         finally:
             barra_loading.visible = False
             page.update()
 
     def limpiar_formulario():
+        nonlocal _id_edicion
         campo_cedula.value = ""
         campo_nombre.value = ""
         campo_apellido.value = ""
         campo_rango.value = None
         campo_unidad.value = ""
-        id_edicion.value = ""
-        id_edicion.visible = False
+        _id_edicion = None
+        titulo_form.value = "Registrar soldado"
         page.update()
 
     async def seleccionar_para_editar(e):
+        nonlocal _id_edicion
         s = e.control.data
+        _id_edicion = s["id_soldado"]
         campo_cedula.value = s["cedula"]
         campo_nombre.value = s["nombre"]
         campo_apellido.value = s["apellido"]
         campo_rango.value = s["rango"]
         campo_unidad.value = s["unidad"]
-        id_edicion.value = str(s["id_soldado"])
-        id_edicion.visible = True
+        titulo_form.value = f"Editando: {s['nombre']} {s['apellido']}"
         page.update()
 
     async def crear_o_actualizar(e):
+        nonlocal _id_edicion
         if not campo_cedula.value or not campo_nombre.value or not campo_apellido.value or not campo_rango.value:
-            texto_estado.value = "Todos los campos son obligatorios."
-            texto_estado.color = ft.Colors.YELLOW
-            page.update()
+            toast(page, "Todos los campos son obligatorios.", "warning")
             return
 
         datos = {
@@ -158,71 +192,118 @@ def build(page: ft.Page):
             "unidad": campo_unidad.value or "",
         }
 
-        try:
-            async with httpx.AsyncClient() as cliente:
-                token = get_token(page)
-                if id_edicion.value:
-                    resp = await cliente.put(
-                        f"{URL_BACKEND}/soldados/editar/{id_edicion.value}",
-                        params=datos,
-                        headers={"Authorization": f"Bearer {token}"},
-                    )
-                else:
-                    resp = await cliente.post(
-                        f"{URL_BACKEND}/soldados/crear",
-                        params=datos,
-                        headers={"Authorization": f"Bearer {token}"},
-                    )
-                resultado = resp.json()
-                if "error" in resultado:
-                    texto_estado.value = f"{resultado['error']}"
-                    texto_estado.color = ft.Colors.RED
-                else:
-                    texto_estado.value = ""
-                    limpiar_formulario()
-                    await cargar_tabla()
-        except Exception as ex:
-            texto_estado.value = f"Error: {ex}"
-            texto_estado.color = ft.Colors.RED
-        finally:
-            page.update()
+        es_edicion = _id_edicion is not None
+
+        async def _guardar():
+            try:
+                async with httpx.AsyncClient() as cliente:
+                    token = get_token(page)
+                    if es_edicion:
+                        resp = await cliente.put(
+                            f"{URL_BACKEND}/soldados/editar/{_id_edicion}",
+                            params=datos,
+                            headers={"Authorization": f"Bearer {token}"},
+                        )
+                    else:
+                        resp = await cliente.post(
+                            f"{URL_BACKEND}/soldados/crear",
+                            params=datos,
+                            headers={"Authorization": f"Bearer {token}"},
+                        )
+                    resultado = resp.json()
+                    if "error" in resultado:
+                        toast(page, resultado["error"], "error")
+                    else:
+                        toast(page, resultado.get("mensaje", "Guardado correctamente"), "success")
+                        limpiar_formulario()
+                        await cargar_tabla()
+            except Exception:
+                toast(page, "Error inesperado. Intente de nuevo.", "error")
+
+        if es_edicion:
+            confirm_dialog(
+                page,
+                title="Editar soldado",
+                message=f"¿Guardar cambios en {campo_nombre.value} {campo_apellido.value}?",
+                button_label="Guardar",
+                on_confirm=_guardar,
+            )
+        else:
+            await _guardar()
 
     async def eliminar_soldado(e):
-        id_soldado = e.control.data
-        try:
-            async with httpx.AsyncClient() as cliente:
-                token = get_token(page)
-                resp = await cliente.delete(f"{URL_BACKEND}/soldados/eliminar/{id_soldado}", headers={"Authorization": f"Bearer {token}"})
-                resultado = resp.json()
-                if "error" in resultado:
-                    texto_estado.value = f"{resultado['error']}"
-                    texto_estado.color = ft.Colors.RED
-                else:
-                    texto_estado.value = ""
-                    await cargar_tabla()
-        except Exception as ex:
-            texto_estado.value = f"Error: {ex}"
-            texto_estado.color = ft.Colors.RED
-        finally:
-            page.update()
+        s = e.control.data
 
-    boton_guardar = ft.FilledButton("Guardar", on_click=crear_o_actualizar, icon=ft.Icons.SAVE)
-    boton_cancelar = ft.FilledButton("Cancelar", on_click=lambda e: limpiar_formulario(), icon=ft.Icons.CANCEL)
+        async def _confirmar():
+            try:
+                async with httpx.AsyncClient() as cliente:
+                    token = get_token(page)
+                    resp = await cliente.delete(
+                        f"{URL_BACKEND}/soldados/eliminar/{s['id_soldado']}",
+                        headers={"Authorization": f"Bearer {token}"},
+                    )
+                    resultado = resp.json()
+                    if "error" in resultado:
+                        toast(page, resultado["error"], "error")
+                    else:
+                        toast(page, resultado.get("mensaje", "Soldado eliminado"), "success")
+                        await cargar_tabla()
+            except Exception:
+                toast(page, "Error inesperado. Intente de nuevo.", "error")
 
-    panel = ft.Column([
-        barra_loading,
-        module_header("Gestión", "Alta, baja y edición de datos de soldados"),
-        ft.Divider(height=1, color=DIVIDER),
-        ft.Row([campo_cedula, campo_nombre, campo_apellido]),
-        ft.Row([campo_rango, campo_unidad, id_edicion]),
-        ft.Row([boton_guardar, boton_cancelar]),
-        ft.Divider(height=1, color=DIVIDER),
-        texto_estado,
-        ft.Divider(height=1, color=DIVIDER),
-        txt_buscar,
-        cont_tabla,
-        no_data_container,
-    ])
+        confirm_dialog(
+            page,
+            title="Eliminar soldado",
+            message=f"¿Eliminar a {s['nombre']} {s['apellido']} ({s['cedula']})? No se puede deshacer.",
+            button_label="Eliminar",
+            on_confirm=_confirmar,
+            destructive=True,
+        )
 
-    return {"panel": panel,
-            "cargar_tabla": cargar_tabla,}
+    titulo_form = ft.Text("Registrar soldado", size=15, color=TEXT, weight=ft.FontWeight.W_600)
+
+    form_card = ft.Container(
+        content=ft.Column([
+            titulo_form,
+            ft.Row([campo_cedula, campo_nombre, campo_apellido, campo_rango, campo_unidad], vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=12),
+            ft.Row([
+                txt_buscar,
+                ft.FilledButton(
+                    "Guardar",
+                    on_click=crear_o_actualizar,
+                    icon=ft.Icons.SAVE,
+                    style=ft.ButtonStyle(bgcolor=BTN_BG, color=BTN_TEXT),
+                ),
+                ft.OutlinedButton(
+                    "Cancelar",
+                    on_click=lambda e: limpiar_formulario(),
+                    icon=ft.Icons.CANCEL,
+                    style=ft.ButtonStyle(
+                        color=TEXT_SECONDARY,
+                        side=ft.BorderSide(1, DIVIDER),
+                    ),
+                ),
+            ], vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=12),
+        ], spacing=12),
+        padding=ft.Padding(16, 16, 16, 16),
+    )
+
+    panel = ft.Column(
+        [
+            barra_loading,
+            module_header("Gestión", "Alta, baja y edición de datos de soldados"),
+            ft.Divider(height=1, color=DIVIDER),
+            form_card,
+            ft.Container(height=8),
+            cont_tabla,
+            no_data_container,
+        ],
+        scroll=ft.ScrollMode.ADAPTIVE,
+        expand=True,
+        horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+    )
+
+    return {
+        "panel": panel,
+        "cargar_tabla": cargar_tabla,
+    }

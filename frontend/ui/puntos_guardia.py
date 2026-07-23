@@ -4,42 +4,113 @@ import flet as ft
 import httpx
 from api import get_token
 from config import URL_BACKEND
-from skeleton import hover_row, loading_bar, module_header, no_data
-from skeleton import table_row as sk_row
+from skeleton import confirm_dialog, loading_bar, module_header, no_data, toast
 from theme import *
 
 
+def _field_style():
+    return dict(
+        text_style=ft.TextStyle(color=TEXT_TABLE, size=13),
+        label_style=ft.TextStyle(color=TEXT_SECONDARY),
+        border_color=DIVIDER,
+        focused_border_color=PRIMARY,
+        cursor_color=PRIMARY,
+    )
+
+
 def build(page: ft.Page):
-    """Construye la interfaz de gestión de puntos de guardia: CRUD de ubicaciones."""
+    _datos = []
+    _id_edicion = None
     _exp = [3, 5, 2]
 
     barra_loading = loading_bar()
-    body = ft.Column(controls=[sk_row(_exp) for _ in range(4)], scroll=ft.ScrollMode.ADAPTIVE, expand=True, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
 
-    header = ft.Container(
+    campo_nombre = ft.TextField(label="Nombre del punto", width=300, **_field_style())
+    campo_descripcion = ft.TextField(label="Descripción (opcional)", width=400, **_field_style())
+
+    txt_buscar = ft.TextField(
+        label="Buscar punto",
+        hint_text="Nombre o descripción",
+        prefix_icon=ft.Icons.SEARCH,
+        width=300,
+        on_change=lambda e: _filtrar(),
+        **_field_style(),
+    )
+
+    body = ft.Column(
+        controls=[], scroll=ft.ScrollMode.ADAPTIVE, expand=True,
+        horizontal_alignment=ft.CrossAxisAlignment.STRETCH, spacing=4,
+    )
+
+    header_row = ft.Container(
         content=ft.Row([
-            ft.Container(ft.Text("NOMBRE", size=16, color=TEXT_TABLE, weight=ft.FontWeight.BOLD), expand=_exp[0]),
-            ft.Container(ft.Text("DESCRIPCI\u00d3N", size=16, color=TEXT_TABLE, weight=ft.FontWeight.BOLD), expand=_exp[1]),
-            ft.Container(ft.Text("ACCIONES", size=16, color=TEXT_TABLE, weight=ft.FontWeight.BOLD), expand=_exp[2]),
+            ft.Container(ft.Text("NOMBRE", size=12, color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD), expand=_exp[0], alignment=ft.Alignment(-1, 0)),
+            ft.Container(ft.Text("DESCRIPCIÓN", size=12, color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD), expand=_exp[1], alignment=ft.Alignment(-1, 0)),
+            ft.Container(ft.Text("ACCIONES", size=12, color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD), expand=_exp[2], alignment=ft.Alignment(-1, 0)),
         ]),
-        bgcolor=SURFACE_LIGHT,
-        padding=ft.Padding(left=16, top=12, right=16, bottom=12),
+        bgcolor=BTN_BG,
+        border_radius=ft.BorderRadius(top_left=10, top_right=10, bottom_left=0, bottom_right=0),
+        padding=ft.Padding(16, 10, 16, 10),
     )
 
     tabla_container = ft.Container(
-        content=ft.Column([header, body]),
+        content=ft.Column([header_row, body]),
         expand=True,
-        bgcolor=TABLE_BG,
-        border_radius=10,
-        clip_behavior=ft.ClipBehavior.HARD_EDGE,
     )
 
-    texto_estado = ft.Text()
-    campo_nombre = ft.TextField(label="Nombre del punto", width=300)
-    campo_descripcion = ft.TextField(label="Descripci\u00f3n (opcional)", width=400)
-    id_edicion = ft.TextField(label="ID", visible=False, disabled=True, width=100)
+    no_data_container = no_data(ft.Icons.LOCATION_ON, "No hay puntos de guardia. Cree uno desde el formulario.")
+    cont_tabla = ft.Container(content=tabla_container, expand=True, visible=False)
+
+    def _filtrar():
+        q = (txt_buscar.value or "").strip().lower()
+        filtrados = [p for p in _datos
+                     if not q or q in p["nombre"].lower()
+                     or q in p.get("descripcion", "").lower()]
+        body.controls.clear()
+        for p in filtrados:
+            btn_editar = ft.IconButton(
+                icon=ft.Icons.EDIT_OUTLINED, icon_color=TEXT_SECONDARY, icon_size=18,
+                tooltip="Editar", data=p, on_click=seleccionar_para_editar,
+            )
+            btn_eliminar = ft.IconButton(
+                icon=ft.Icons.DELETE_OUTLINE, icon_color=TEXT_SECONDARY, icon_size=18,
+                tooltip="Eliminar", data=p, on_click=eliminar_punto,
+            )
+
+            row = ft.Container(
+                content=ft.Row([
+                    ft.Container(ft.Text(p["nombre"], size=14, color=TEXT_TABLE, weight=ft.FontWeight.W_500), expand=_exp[0], alignment=ft.Alignment(-1, 0)),
+                    ft.Container(ft.Text(p.get("descripcion", ""), size=14, color=TEXT_TABLE, weight=ft.FontWeight.W_500), expand=_exp[1], alignment=ft.Alignment(-1, 0)),
+                    ft.Container(ft.Row([btn_editar, btn_eliminar], spacing=0), expand=_exp[2], alignment=ft.Alignment(-1, 0)),
+                ]),
+                bgcolor=SURFACE,
+                height=56,
+                padding=ft.Padding(16, 0, 16, 0),
+                border_radius=10,
+            )
+
+            def _make_hover(c):
+                def _on_hover(e):
+                    if e.data:
+                        c.bgcolor = HOVER_ROW_BG
+                        c.shadow = [ft.BoxShadow(blur_radius=8, color="#000000", spread_radius=0, offset=ft.Offset(0, 2))]
+                        c.scale = ft.Scale(1.005)
+                    else:
+                        c.bgcolor = SURFACE
+                        c.shadow = []
+                        c.scale = ft.Scale(1.0)
+                    c.update()
+                return _on_hover
+
+            row.on_hover = _make_hover(row)
+            body.controls.append(row)
+        hay = len(filtrados) > 0
+        cont_tabla.visible = hay
+        no_data_container.visible = not hay
+        page.update()
 
     async def cargar_tabla():
+        nonlocal _datos
         barra_loading.visible = True
         page.update()
         await asyncio.sleep(0.3)
@@ -47,57 +118,38 @@ def build(page: ft.Page):
             async with httpx.AsyncClient() as cliente:
                 token = get_token(page)
                 resp = await cliente.get(f"{URL_BACKEND}/puntos", headers={"Authorization": f"Bearer {token}"})
-                datos = resp.json()
-                body.controls.clear()
-                for p in datos:
-                    body.controls.append(hover_row(ft.Container(
-                        content=ft.Row([
-                            ft.Container(ft.Text(p["nombre"], size=16, color=TEXT_TABLE), expand=_exp[0]),
-                            ft.Container(ft.Text(p.get("descripcion", ""), size=16, color=TEXT_TABLE), expand=_exp[1]),
-                            ft.Container(ft.Row([
-                                ft.IconButton(icon=ft.Icons.EDIT, tooltip="Editar", data=p, on_click=seleccionar_para_editar),
-                                ft.IconButton(icon=ft.Icons.DELETE, tooltip="Eliminar", data=p["id"], on_click=eliminar_punto),
-                            ]), expand=_exp[2]),
-                        ]),
-                        bgcolor=TABLE_ROW,
-                        height=40,
-                        padding=ft.Padding(left=16, top=0, right=16, bottom=0),
-                    )))
-                texto_estado.value = ""
-                hay = len(datos) > 0
-                cont_tabla.visible = hay
-                no_data_container.visible = not hay
-        except Exception as ex:
-            texto_estado.value = f"Error al cargar: {ex}"
-            texto_estado.color = ft.Colors.RED
+                _datos = resp.json()
+                _filtrar()
+        except Exception:
+            toast(page, "Error al cargar puntos.", "error")
             body.controls.clear()
-            body.controls.append(
-                ft.Container(ft.Text(f"Error: {ex}", italic=True, color=TEXT_SECONDARY, size=14),
-                             alignment=ft.Alignment(0, 0), padding=20))
+            cont_tabla.visible = False
+            no_data_container.visible = True
         finally:
             barra_loading.visible = False
             page.update()
 
     def limpiar_formulario():
+        nonlocal _id_edicion
         campo_nombre.value = ""
         campo_descripcion.value = ""
-        id_edicion.value = ""
-        id_edicion.visible = False
+        _id_edicion = None
+        titulo_form.value = "Registrar punto"
         page.update()
 
     async def seleccionar_para_editar(e):
+        nonlocal _id_edicion
         p = e.control.data
+        _id_edicion = p["id"]
         campo_nombre.value = p["nombre"]
         campo_descripcion.value = p.get("descripcion", "")
-        id_edicion.value = str(p["id"])
-        id_edicion.visible = True
+        titulo_form.value = f"Editando: {p['nombre']}"
         page.update()
 
     async def crear_o_actualizar(e):
+        nonlocal _id_edicion
         if not campo_nombre.value:
-            texto_estado.value = "El nombre es obligatorio."
-            texto_estado.color = ft.Colors.YELLOW
-            page.update()
+            toast(page, "El nombre es obligatorio.", "warning")
             return
 
         datos = {
@@ -105,76 +157,118 @@ def build(page: ft.Page):
             "descripcion": campo_descripcion.value or "",
         }
 
-        try:
-            async with httpx.AsyncClient() as cliente:
-                token = get_token(page)
-                if id_edicion.value:
-                    resp = await cliente.put(
-                        f"{URL_BACKEND}/puntos/editar/{id_edicion.value}",
-                        params=datos,
-                        headers={"Authorization": f"Bearer {token}"},
-                    )
-                else:
-                    resp = await cliente.post(
-                        f"{URL_BACKEND}/puntos/crear",
-                        params=datos,
-                        headers={"Authorization": f"Bearer {token}"},
-                    )
-                resultado = resp.json()
-                if "error" in resultado:
-                    texto_estado.value = resultado['error']
-                    texto_estado.color = ft.Colors.RED
-                else:
-                    texto_estado.value = ""
-                    limpiar_formulario()
-                    await cargar_tabla()
-        except Exception as ex:
-            texto_estado.value = f"Error: {ex}"
-            texto_estado.color = ft.Colors.RED
-        finally:
-            page.update()
+        es_edicion = _id_edicion is not None
+
+        async def _guardar():
+            try:
+                async with httpx.AsyncClient() as cliente:
+                    token = get_token(page)
+                    if es_edicion:
+                        resp = await cliente.put(
+                            f"{URL_BACKEND}/puntos/editar/{_id_edicion}",
+                            params=datos,
+                            headers={"Authorization": f"Bearer {token}"},
+                        )
+                    else:
+                        resp = await cliente.post(
+                            f"{URL_BACKEND}/puntos/crear",
+                            params=datos,
+                            headers={"Authorization": f"Bearer {token}"},
+                        )
+                    resultado = resp.json()
+                    if "error" in resultado:
+                        toast(page, resultado["error"], "error")
+                    else:
+                        toast(page, resultado.get("mensaje", "Guardado correctamente"), "success")
+                        limpiar_formulario()
+                        await cargar_tabla()
+            except Exception:
+                toast(page, "Error inesperado. Intente de nuevo.", "error")
+
+        if es_edicion:
+            confirm_dialog(
+                page,
+                title="Editar punto",
+                message=f"¿Guardar cambios en {campo_nombre.value}?",
+                button_label="Guardar",
+                on_confirm=_guardar,
+            )
+        else:
+            await _guardar()
 
     async def eliminar_punto(e):
-        id_punto = e.control.data
-        try:
-            async with httpx.AsyncClient() as cliente:
-                token = get_token(page)
-                resp = await cliente.delete(f"{URL_BACKEND}/puntos/eliminar/{id_punto}", headers={"Authorization": f"Bearer {token}"})
-                resultado = resp.json()
-                if "error" in resultado:
-                    texto_estado.value = resultado['error']
-                    texto_estado.color = ft.Colors.RED
-                else:
-                    texto_estado.value = ""
-                    await cargar_tabla()
-        except Exception as ex:
-            texto_estado.value = f"Error: {ex}"
-            texto_estado.color = ft.Colors.RED
-        finally:
-            page.update()
+        p = e.control.data
 
-    boton_guardar = ft.FilledButton("Guardar", on_click=crear_o_actualizar, icon=ft.Icons.SAVE)
-    boton_cancelar = ft.FilledButton("Cancelar", on_click=lambda e: limpiar_formulario(), icon=ft.Icons.CANCEL)
+        async def _confirmar():
+            try:
+                async with httpx.AsyncClient() as cliente:
+                    token = get_token(page)
+                    resp = await cliente.delete(
+                        f"{URL_BACKEND}/puntos/eliminar/{p['id']}",
+                        headers={"Authorization": f"Bearer {token}"},
+                    )
+                    resultado = resp.json()
+                    if "error" in resultado:
+                        toast(page, resultado["error"], "error")
+                    else:
+                        toast(page, resultado.get("mensaje", "Punto eliminado"), "success")
+                        await cargar_tabla()
+            except Exception:
+                toast(page, "Error inesperado. Intente de nuevo.", "error")
 
-    no_data_container = no_data(ft.Icons.LOCATION_ON, "No hay puntos de guardia. Cree uno desde el formulario.")
-    cont_tabla = ft.Row([
-        ft.Container(expand=1),
-        ft.Container(content=tabla_container, expand=6, padding=ft.Padding(left=20, right=20, top=10, bottom=10)),
-        ft.Container(expand=1),
-    ], expand=True, visible=False)
+        confirm_dialog(
+            page,
+            title="Eliminar punto",
+            message=f"¿Eliminar el punto {p['nombre']}? No se puede deshacer.",
+            button_label="Eliminar",
+            on_confirm=_confirmar,
+            destructive=True,
+        )
 
-    panel = ft.Column([
-        barra_loading,
-        module_header("Puntos de Guardia", "Definición de ubicaciones y puntos de servicio"),
-        ft.Divider(height=1, color=DIVIDER),
-        ft.Row([campo_nombre, campo_descripcion, id_edicion]),
-        ft.Row([boton_guardar, boton_cancelar]),
-        ft.Divider(height=1, color=DIVIDER),
-        texto_estado,
-        ft.Divider(height=1, color=DIVIDER),
-        cont_tabla,
-        no_data_container,
-    ])
+    titulo_form = ft.Text("Registrar punto", size=15, color=TEXT, weight=ft.FontWeight.W_600)
 
-    return {"panel": panel,
-            "cargar_tabla": cargar_tabla,}
+    form_card = ft.Container(
+        content=ft.Column([
+            titulo_form,
+            ft.Row([campo_nombre, campo_descripcion], vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=12),
+            ft.Row([
+                txt_buscar,
+                ft.FilledButton(
+                    "Guardar",
+                    on_click=crear_o_actualizar,
+                    icon=ft.Icons.SAVE,
+                    style=ft.ButtonStyle(bgcolor=BTN_BG, color=BTN_TEXT),
+                ),
+                ft.OutlinedButton(
+                    "Cancelar",
+                    on_click=lambda e: limpiar_formulario(),
+                    icon=ft.Icons.CANCEL,
+                    style=ft.ButtonStyle(
+                        color=TEXT_SECONDARY,
+                        side=ft.BorderSide(1, DIVIDER),
+                    ),
+                ),
+            ], vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=12),
+        ], spacing=12),
+        padding=ft.Padding(16, 16, 16, 16),
+    )
+
+    panel = ft.Column(
+        [
+            barra_loading,
+            module_header("Puntos de Guardia", "Definición de ubicaciones y puntos de servicio"),
+            ft.Divider(height=1, color=DIVIDER),
+            form_card,
+            ft.Container(height=8),
+            cont_tabla,
+            no_data_container,
+        ],
+        scroll=ft.ScrollMode.ADAPTIVE,
+        expand=True,
+        horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+    )
+
+    return {
+        "panel": panel,
+        "cargar_tabla": cargar_tabla,
+    }

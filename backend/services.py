@@ -5,7 +5,6 @@ from datetime import datetime, timedelta
 
 # Imports para el PDF
 from io import BytesIO
-from typing import Tuple
 
 import httpx
 from models import Asignacion, Guardia, Novedad, PuntoGuardia, Restriccion, Soldado
@@ -34,6 +33,7 @@ FACTOR_TURNO = {
     "nocturno": 2.0,
 }
 FACTOR_FIN_SEMANA = 1.5  # Multiplicador adicional para sábado y domingo
+EMA_ALPHA = 0.5  # Suavizado exponencial para carryover entre meses
 
 
 def _log_error(contexto: str, ex: Exception):
@@ -99,22 +99,31 @@ def generar_calendario(mes: int, año: int, usuario_id: int, session: Session) -
                 PuntoGuardia.id_usuario == usuario_id
             )
         ).all()
-        ids_guardias = [g[0] for g in guardias_a_borrar]
+        ids_guardias = [g if isinstance(g, int) else g[0] for g in guardias_a_borrar]
 
         if ids_guardias:
             session.exec(delete(Asignacion).where(Asignacion.id_guardia.in_(ids_guardias)))
             session.exec(delete(Guardia).where(Guardia.id_guardia.in_(ids_guardias)))
         session.commit()
 
-        decay = 0.5
-        if mes == 1:
-            mes_puntos = 12
-            año_puntos = año - 1
-        else:
-            mes_puntos = mes - 1
-            año_puntos = año
-        puntos_arrastre = _calcular_puntos_mes(mes_puntos, año_puntos, usuario_id, session)
+        # =========================================================
+        # Carryover: EMA sobre los últimos 3 meses desde la DB
+        # =========================================================
+        historial = {s.id_soldado: 0.0 for s in soldados}
+        for offset in [3, 2, 1]:
+            m_back = mes - offset
+            a_back = año
+            while m_back < 1:
+                m_back += 12
+                a_back -= 1
+            pts_mes = _calcular_puntos_mes(m_back, a_back, usuario_id, session)
+            for s in soldados:
+                pts = pts_mes.get(s.id_soldado, 0.0)
+                historial[s.id_soldado] = EMA_ALPHA * pts + (1 - EMA_ALPHA) * historial[s.id_soldado]
 
+        # =========================================================
+        # Datos previos: 48h del mes anterior y restricciones
+        # =========================================================
         if mes == 1:
             mes_anterior = 12
             año_anterior = año - 1
@@ -152,11 +161,6 @@ def generar_calendario(mes: int, año: int, usuario_id: int, session: Session) -
             )
         ).all()
 
-        historial = {}
-        for s in soldados:
-            pts_arrastre = puntos_arrastre.get(s.id_soldado, 0.0)
-            historial[s.id_soldado] = pts_arrastre * decay
-
         ultima_fecha = {}
         for s in soldados:
             ultima_fecha[s.id_soldado] = ultima_fecha_previa.get(s.id_soldado, None)
@@ -165,14 +169,13 @@ def generar_calendario(mes: int, año: int, usuario_id: int, session: Session) -
 
         dia_actual = inicio
         while dia_actual < proximo_mes:
-            for turno in ["nocturno", "diurno"]:
+            for turno in ["diurno", "nocturno"]:
                 hora_inicio = 19 if turno == "nocturno" else 7
                 fecha_inicio_turno = dia_actual.replace(hour=hora_inicio)
                 fecha_fin_turno = fecha_inicio_turno + timedelta(hours=12)
 
                 puntos_barajados = list(puntos)
                 random.shuffle(puntos_barajados)
-
                 for punto in puntos_barajados:
                     nueva_guardia = Guardia(
                         fecha_inicio=fecha_inicio_turno,
@@ -200,14 +203,11 @@ def generar_calendario(mes: int, año: int, usuario_id: int, session: Session) -
                     if not candidatos:
                         session.rollback()
                         return {
-                            "error": f"No hay candidatos para el {dia_actual.date()} turno {turno}, punto {punto.nombre}."
+                            "error": "No hay candidatos para el {} turno {}, punto {}.".format(
+                                dia_actual.date(), turno, punto.nombre)
                         }
 
-                    def clave_orden(s: Soldado) -> Tuple[int, int, str]:
-                        prioridad = PRIORIDAD_RANGO.get(s.rango, 99)
-                        return (historial[s.id_soldado], prioridad, s.cedula)
-
-                    elegido = min(candidatos, key=clave_orden)
+                    elegido = min(candidatos, key=lambda s: historial[s.id_soldado])
 
                     nueva_asignacion = Asignacion(
                         id_soldado=elegido.id_soldado,
@@ -227,7 +227,7 @@ def generar_calendario(mes: int, año: int, usuario_id: int, session: Session) -
                         "turno": turno,
                         "punto": punto.nombre,
                         "cedula": elegido.cedula,
-                        "nombre": f"{elegido.nombre} {elegido.apellido}"
+                        "nombre": "{} {}".format(elegido.nombre, elegido.apellido)
                     })
 
             dia_actual += timedelta(days=1)
@@ -991,11 +991,16 @@ def obtener_estadisticas(mes: int, año: int, usuario_id: int, session: Session,
     total_sustituciones = len(sustituciones_data)
     total_restricciones = len(restricciones_data)
 
-    # --- Porcentaje de equidad ---
+    # --- Porcentaje de equidad (desviación promedio sobre la media) ---
     max_puntos = max(s["total_puntos"] for s in lista_soldados) if lista_soldados else 1
     min_puntos = min(s["total_puntos"] for s in lista_soldados) if lista_soldados else 1
     dif = max_puntos - min_puntos
-    equidad_pct = max(0, 1 - (dif / max_puntos)) * 100 if max_puntos > 0 else 100
+    if lista_soldados:
+        media = sum(s["total_puntos"] for s in lista_soldados) / len(lista_soldados)
+        desviacion = sum(abs(s["total_puntos"] - media) for s in lista_soldados) / len(lista_soldados)
+        equidad_pct = max(0, (1 - desviacion / media) * 100) if media > 0 else 100
+    else:
+        equidad_pct = 100
 
     # --- Detalle de sustituciones y restricciones (para mostrar en tablas) ---
     detalle_sustituciones = []
@@ -1040,9 +1045,9 @@ def obtener_estadisticas(mes: int, año: int, usuario_id: int, session: Session,
             m_pts[sid] = m_pts.get(sid, 0) + factor
         pts_list = list(m_pts.values())
         if pts_list:
-            mx_m = max(pts_list)
-            mn_m = min(pts_list)
-            m_pct = max(0, 1 - ((mx_m - mn_m) / mx_m)) * 100 if mx_m > 0 else 100
+            media_m = sum(pts_list) / len(pts_list)
+            desv_m = sum(abs(p - media_m) for p in pts_list) / len(pts_list)
+            m_pct = max(0, (1 - desv_m / media_m) * 100) if media_m > 0 else 100
         else:
             m_pct = 0
         evolucion_equidad.append({
@@ -1093,85 +1098,95 @@ def obtener_estadisticas(mes: int, año: int, usuario_id: int, session: Session,
     }
 
 def obtener_historial_sustituciones(mes: int, año: int, usuario_id: int, session: Session) -> list:
-    inicio = datetime(año, mes, 1)
-    if mes == 12:
-        proximo_mes = datetime(año + 1, 1, 1)
-    else:
-        proximo_mes = datetime(año, mes + 1, 1)
-
-    # --- 1. Sustituciones simples ---
-    query = (
-        select(Asignacion, Guardia, Soldado, PuntoGuardia)
-        .join(Guardia, Asignacion.id_guardia == Guardia.id_guardia)
-        .join(Soldado, Asignacion.id_soldado == Soldado.id_soldado)
-        .join(PuntoGuardia, Guardia.id_punto == PuntoGuardia.id_punto)
-        .where(
-            Guardia.fecha_inicio >= inicio,
-            Guardia.fecha_inicio < proximo_mes,
-            Asignacion.id_asignacion_original.isnot(None),
-            PuntoGuardia.id_usuario == usuario_id,
-        )
-        .order_by(Guardia.fecha_inicio.desc())
-    )
-    resultados = session.exec(query).all()
-
-    historial = []
-    for asignacion, guardia, soldado, punto in resultados:
-        asignacion_original = session.get(Asignacion, asignacion.id_asignacion_original)
-        if not asignacion_original:
-            continue
-        if asignacion_original.es_anulada:
-            soldado_original = session.get(Soldado, asignacion_original.id_soldado)
-            titular_original = f"{soldado_original.nombre} {soldado_original.apellido}" if soldado_original else ""
-            historial.append({
-                "fecha": guardia.fecha_inicio.strftime("%Y-%m-%d"),
-                "turno": guardia.tipo,
-                "punto": punto.nombre,
-                "titular_original": titular_original,
-                "sustituto": f"{soldado.nombre} {soldado.apellido}",
-                "cedula_sustituto": soldado.cedula,
-                "tipo": "Simple",
-                "id_asignacion": asignacion.id_asignacion,
-            })
-
-    # --- 2. Trueques (novedades enriquecidas) ---
-    novedades_trueque = session.exec(
-        select(Novedad)
-        .join(Asignacion, Novedad.id_asignacion == Asignacion.id_asignacion)
-        .join(Guardia, Asignacion.id_guardia == Guardia.id_guardia)
-        .join(PuntoGuardia, Guardia.id_punto == PuntoGuardia.id_punto)
-        .where(
-            Novedad.fecha_reporte >= inicio,
-            Novedad.fecha_reporte < proximo_mes,
-            Novedad.descripcion.startswith("TRUEQUE:"),
-            PuntoGuardia.id_usuario == usuario_id,
-        )
-    ).all()
-
-    for nov in novedades_trueque:
-        texto = nov.descripcion[len("TRUEQUE:"):]
-        # Obtener datos de la guardia asociada
-        asignacion = session.get(Asignacion, nov.id_asignacion)
-        if asignacion:
-            guardia = session.get(Guardia, asignacion.id_guardia)
-            punto = session.get(PuntoGuardia, guardia.id_punto) if guardia else None
-            historial.append({
-                "tipo": "Trueque",
-                "texto_trueque": texto,
-                "fecha": guardia.fecha_inicio.strftime("%Y-%m-%d") if guardia else "",
-                "turno": guardia.tipo if guardia else "",
-                "punto": punto.nombre if punto else "",
-            })
+    try:
+        inicio = datetime(año, mes, 1)
+        if mes == 12:
+            proximo_mes = datetime(año + 1, 1, 1)
         else:
-            historial.append({
-                "tipo": "Trueque",
-                "texto_trueque": texto,
-                "fecha": "",
-                "turno": "",
-                "punto": "",
-            })
+            proximo_mes = datetime(año, mes + 1, 1)
 
-    return historial
+        # --- 1. Sustituciones simples ---
+        query = (
+            select(Asignacion, Guardia, Soldado, PuntoGuardia)
+            .join(Guardia, Asignacion.id_guardia == Guardia.id_guardia)
+            .join(Soldado, Asignacion.id_soldado == Soldado.id_soldado)
+            .join(PuntoGuardia, Guardia.id_punto == PuntoGuardia.id_punto)
+            .where(
+                Guardia.fecha_inicio >= inicio,
+                Guardia.fecha_inicio < proximo_mes,
+                Asignacion.id_asignacion_original.isnot(None),
+                PuntoGuardia.id_usuario == usuario_id,
+            )
+            .order_by(Guardia.fecha_inicio.desc())
+        )
+        resultados = session.exec(query).all()
+
+        historial = []
+        for asignacion, guardia, soldado, punto in resultados:
+            asignacion_original = session.get(Asignacion, asignacion.id_asignacion_original)
+            if not asignacion_original:
+                continue
+            if asignacion_original.es_anulada:
+                soldado_original = session.get(Soldado, asignacion_original.id_soldado)
+                titular_original = f"{soldado_original.nombre} {soldado_original.apellido}" if soldado_original else ""
+                novedad = session.exec(
+                    select(Novedad).where(Novedad.id_asignacion == asignacion.id_asignacion)
+                ).first()
+                motivo = ""
+                if novedad and novedad.descripcion and novedad.descripcion.startswith("SUSTITUCIÓN:"):
+                    motivo = novedad.descripcion[len("SUSTITUCIÓN:"):].strip()
+                historial.append({
+                    "fecha": guardia.fecha_inicio.strftime("%Y-%m-%d"),
+                    "turno": guardia.tipo,
+                    "punto": punto.nombre,
+                    "titular_original": titular_original,
+                    "sustituto": f"{soldado.nombre} {soldado.apellido}",
+                    "cedula_sustituto": soldado.cedula,
+                    "tipo": "Simple",
+                    "id_asignacion": asignacion.id_asignacion,
+                    "motivo": motivo,
+                })
+
+        # --- 2. Trueques (novedades enriquecidas) ---
+        novedades_trueque = session.exec(
+            select(Novedad)
+            .join(Asignacion, Novedad.id_asignacion == Asignacion.id_asignacion)
+            .join(Guardia, Asignacion.id_guardia == Guardia.id_guardia)
+            .join(PuntoGuardia, Guardia.id_punto == PuntoGuardia.id_punto)
+            .where(
+                Novedad.fecha_reporte >= inicio,
+                Novedad.fecha_reporte < proximo_mes,
+                Novedad.descripcion.startswith("TRUEQUE:"),
+                PuntoGuardia.id_usuario == usuario_id,
+            )
+        ).all()
+
+        for nov in novedades_trueque:
+            texto = nov.descripcion[len("TRUEQUE:"):] if nov.descripcion else ""
+            asignacion = session.get(Asignacion, nov.id_asignacion)
+            if asignacion:
+                guardia = session.get(Guardia, asignacion.id_guardia)
+                punto = session.get(PuntoGuardia, guardia.id_punto) if guardia else None
+                historial.append({
+                    "tipo": "Trueque",
+                    "texto_trueque": texto,
+                    "fecha": guardia.fecha_inicio.strftime("%Y-%m-%d") if guardia else "",
+                    "turno": guardia.tipo if guardia else "",
+                    "punto": punto.nombre if punto else "",
+                })
+            else:
+                historial.append({
+                    "tipo": "Trueque",
+                    "texto_trueque": texto,
+                    "fecha": "",
+                    "turno": "",
+                    "punto": "",
+                })
+
+        return historial
+    except Exception as ex:
+        _log_error("obtener_historial_sustituciones", ex)
+        return []
 
 async def difundir_pdf(mes: int, año: int, usuario_id: int, session: Session) -> dict:
     pdf_buffer = generar_pdf(mes, año, usuario_id, session)
