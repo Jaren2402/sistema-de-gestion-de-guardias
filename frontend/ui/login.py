@@ -142,8 +142,8 @@ def login_screen(page: ft.Page, on_login_exitoso):
         except ValueError as ex:
             lbl_error.value = str(ex)
             error_card.visible = True
-        except Exception as ex:
-            lbl_error.value = f"Error de conexi\u00f3n: {ex}"
+        except Exception:
+            lbl_error.value = "Error de conexión. Verifique el servidor."
             error_card.visible = True
         finally:
             btn_login.disabled = False

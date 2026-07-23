@@ -1,108 +1,60 @@
 import asyncio
+from datetime import datetime
 
 import flet as ft
 import httpx
 from api import get_token
 from config import URL_BACKEND
-from skeleton import loading_bar, module_header, toast
+from skeleton import confirm_dialog, loading_bar, module_header, no_data, toast
 from theme import *
 
-_TRUECOLOR = "#1E88E5"
-_SIMPLECOLOR = "#0D47A1"
+
+def _field_style():
+    return dict(
+        text_style=ft.TextStyle(color=TEXT_TABLE, size=13),
+        label_style=ft.TextStyle(color=TEXT_SECONDARY),
+        border_color=DIVIDER,
+        focused_border_color=PRIMARY,
+        cursor_color=PRIMARY,
+    )
 
 
-def build(page: ft.Page, on_sustitucion_completada=None):
+def build(page: ft.Page):
     barra_loading = loading_bar()
     _asignaciones = []
     _motivo_actual = ""
 
     selector_mes = ft.Dropdown(
-        label="Mes",
+        label="Mes", expand=False, width=130,
         options=[ft.dropdown.Option(MESES[i]) for i in range(12)],
-        value=MESES[4],
-        width=120,
+        value=MESES[datetime.now().month - 1],
+        text_style=ft.TextStyle(color=TEXT_TABLE, size=13),
+        label_style=ft.TextStyle(color=TEXT_SECONDARY),
+        border_color=DIVIDER, focused_border_color=PRIMARY,
     )
-    selector_mes.on_change = lambda e: page.run_task(cargar_asignaciones)
-    selector_ano = ft.TextField(label="Año", value="2026", width=100)
-    selector_ano.on_change = lambda e: page.run_task(cargar_asignaciones)
+    selector_ano = ft.TextField(label="Año", value=str(datetime.now().year), width=100, **_field_style())
 
-    boton_cargar = ft.FilledButton("Cargar", on_click=lambda e: page.run_task(cargar_asignaciones))
-
-    selector_punto = ft.Dropdown(label="Punto", options=[ft.dropdown.Option("")], width=160)
-
-    boton_refrescar_punto = ft.IconButton(
-        icon=ft.Icons.REFRESH,
-        tooltip="Cargar guardias del punto",
-        icon_size=20,
-        icon_color=PRIMARY,
-        style=ft.ButtonStyle(bgcolor={"": "#1a1a2e", "hovered": "#2a2a4e"}),
-        on_click=lambda e: _llenar_dropdown(),
+    selector_punto = ft.Dropdown(
+        label="Punto", expand=False, width=160,
+        options=[ft.dropdown.Option("")],
+        text_style=ft.TextStyle(color=TEXT_TABLE, size=13),
+        label_style=ft.TextStyle(color=TEXT_SECONDARY),
+        border_color=DIVIDER, focused_border_color=PRIMARY,
     )
 
-    selector_asignacion = ft.Dropdown(label="Guardia a sustituir", options=[], width=300)
-    boton_buscar = ft.FilledButton("Buscar candidatos", on_click=lambda e: page.run_task(buscar_candidatos))
+    selector_asignacion = ft.Dropdown(
+        label="Guardia a sustituir", expand=False, width=280,
+        options=[],
+        text_style=ft.TextStyle(color=TEXT_TABLE, size=13),
+        label_style=ft.TextStyle(color=TEXT_SECONDARY),
+        border_color=DIVIDER, focused_border_color=PRIMARY,
+    )
 
-    zona_resultados = ft.Column(spacing=16, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
+    zona_resultados = ft.Column(spacing=0, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
 
-    def _build_candidate_card(soldado_nombre, soldado_apellido, cedula, rango, info_extra, tipo, on_click_callback):
-        color = _TRUECOLOR if tipo == "trueque" else _SIMPLECOLOR
-        badge_text = "Trueque" if tipo == "trueque" else "Sustitución"
+    no_data_container = no_data(ft.Icons.SWAP_HORIZ, "Seleccione una guardia para ver opciones de sustitución")
 
-        def _hover(e):
-            e.control.bgcolor = "#191919" if e.data else SURFACE
-            e.control.update()
-
-        return ft.Container(
-            content=ft.Row([
-                ft.Container(width=6, bgcolor=color, border_radius=2),
-                ft.Container(
-                    content=ft.Column([
-                        ft.Row([
-                            ft.Text(badge_text.upper(), size=11, color=TEXT_SECONDARY, weight=ft.FontWeight.BOLD),
-                            ft.Container(expand=True),
-                        ], spacing=6),
-                        ft.Container(
-                            content=ft.Text(f"{soldado_nombre} {soldado_apellido}  ·  {rango}",
-                                            size=14, weight=ft.FontWeight.BOLD, color=TEXT_SECONDARY),
-                            margin=ft.Margin(0, 4, 0, 0),
-                        ),
-                        ft.Container(height=8),
-                        ft.Text(info_extra, size=17, color=ft.Colors.GREY_400 if "fatiga" in info_extra.lower() else None),
-                    ], spacing=0, expand=True),
-                    padding=ft.Padding(left=12, top=12, right=12, bottom=12),
-                    expand=True,
-                ),
-            ], spacing=0),
-            bgcolor=SURFACE,
-            border_radius=24,
-            height=140,
-            expand=True,
-            padding=0,
-            on_click=on_click_callback,
-            on_hover=_hover,
-        )
-
-    async def abrir_dialogo_confirmar(mensaje, callback_ejecutar):
-        texto_confirm = ft.Text(mensaje, size=15, color=TEXT_SECONDARY)
-
-        async def confirmar(e):
-            page.pop_dialog()
-            await callback_ejecutar()
-
-        dialogo = ft.AlertDialog(
-            title=ft.Text("Confirmar operación", size=20, weight=ft.FontWeight.BOLD, color=TEXT),
-            content=ft.Column([texto_confirm], tight=True),
-            bgcolor=SURFACE,
-            actions=[
-                ft.OutlinedButton("Cancelar", on_click=lambda e: page.pop_dialog(),
-                                  style=ft.ButtonStyle(color=TEXT_SECONDARY, overlay_color="#333333", side=ft.BorderSide(0))),
-                ft.FilledButton("Confirmar", on_click=confirmar,
-                                style=ft.ButtonStyle(bgcolor=PRIMARY, color=ft.Colors.WHITE)),
-            ],
-        )
-        page.show_dialog(dialogo)
-
-    def _llenar_dropdown():
+    async def _llenar_dropdown(e=None):
         punto = selector_punto.value
         if not punto:
             selector_asignacion.options = []
@@ -135,18 +87,111 @@ def build(page: ft.Page, on_sustitucion_completada=None):
                 puntos = sorted(set(str(a["punto"]) for a in _asignaciones))
                 selector_punto.options = [ft.dropdown.Option(p) for p in puntos]
                 selector_punto.value = None
+                selector_asignacion.options = []
+                selector_asignacion.value = None
+                zona_resultados.controls.clear()
+                no_data_container.visible = True
                 if not _asignaciones:
                     toast(page, "No hay guardias para este mes", "warning")
-        except Exception as ex:
-            toast(page, f"Error: {ex}", "error")
+        except Exception:
+            toast(page, "Error al cargar las asignaciones.", "error")
         finally:
             barra_loading.visible = False
             page.update()
-        _llenar_dropdown()
+
+    async def _limpiar(e=None):
+        nonlocal _motivo_actual
+        _motivo_actual = ""
+        await cargar_asignaciones()
+
+    def _build_info_card(icono, titulo, lineas):
+        items = []
+        items.append(ft.Text(titulo, size=14, weight=ft.FontWeight.BOLD, color=TEXT))
+        for linea in lineas:
+            items.append(ft.Container(height=4))
+            items.append(ft.Text(linea, size=13, color=TEXT_SECONDARY))
+        return ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.Icon(icono, size=18, color=PRIMARY),
+                    ft.Text(titulo, size=14, weight=ft.FontWeight.BOLD, color=TEXT),
+                ], spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                ft.Divider(height=1, color=DIVIDER),
+            ] + items, spacing=0),
+            bgcolor=SURFACE,
+            border_radius=12,
+            padding=ft.Padding(14, 12, 14, 12),
+            expand=True,
+        )
+
+    def _build_candidate_card(soldado_nombre, soldado_apellido, cedula, rango, info_extra, tipo, on_click_callback):
+        badge_color = SHIFT_DIURNO if tipo == "trueque" else BTN_BG
+        badge_text = "TRUEQUE" if tipo == "trueque" else "SUSTITUCIÓN"
+        fatiga = "fatiga" in info_extra.lower()
+
+        card = ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.Text(f"{soldado_nombre} {soldado_apellido}", size=16, weight=ft.FontWeight.W_500, color=TEXT),
+                    ft.Container(
+                        content=ft.Text(badge_text, size=11, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                        bgcolor=badge_color,
+                        border_radius=4,
+                        padding=ft.Padding(8, 3, 8, 3),
+                    ),
+                ], spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                ft.Divider(height=1, color=DIVIDER),
+                ft.Text(f"{rango}  ·  C.I. {cedula}", size=14, color=TEXT_SECONDARY),
+                ft.Container(height=4),
+                ft.Text(info_extra, size=15, color=WARNING if fatiga else TEXT_SECONDARY, italic=fatiga),
+                ft.Container(expand=True),
+                ft.Row([
+                    ft.Container(expand=True),
+                    ft.FilledButton(
+                        "Seleccionar",
+                        on_click=on_click_callback,
+                        style=ft.ButtonStyle(bgcolor=BTN_BG, color=BTN_TEXT),
+                    ),
+                ], spacing=0),
+            ], spacing=6, expand=True),
+            bgcolor=SURFACE,
+            border_radius=12,
+            padding=ft.Padding(16, 14, 16, 12),
+            height=190,
+            expand=True,
+            animate=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
+        )
+
+        def _on_hover(e):
+            if e.data:
+                card.bgcolor = HOVER_ROW_BG
+                card.shadow = [ft.BoxShadow(blur_radius=10, color="#000000", spread_radius=1, offset=ft.Offset(0, 3))]
+                card.scale = ft.Scale(1.01)
+            else:
+                card.bgcolor = SURFACE
+                card.shadow = []
+                card.scale = ft.Scale(1.0)
+            card.update()
+
+        card.on_hover = _on_hover
+        return card
+
+    async def abrir_dialogo_confirmar(mensaje, callback_ejecutar):
+        async def confirmar(e=None):
+            page.pop_dialog()
+            page.update()
+            await callback_ejecutar()
+
+        confirm_dialog(
+            page,
+            title="Confirmar operación",
+            message=mensaje,
+            button_label="Confirmar",
+            on_confirm=confirmar,
+        )
 
     async def buscar_candidatos(e=None):
         if not selector_asignacion.value:
-            toast(page, "Seleccione una guardia primero", "warning")
             return
 
         id_asig = int(selector_asignacion.value)
@@ -157,6 +202,7 @@ def build(page: ft.Page, on_sustitucion_completada=None):
 
         barra_loading.visible = True
         zona_resultados.controls.clear()
+        no_data_container.visible = False
         page.update()
         await asyncio.sleep(0.3)
         try:
@@ -176,23 +222,15 @@ def build(page: ft.Page, on_sustitucion_completada=None):
                 intercambios = datos.get("intercambios", [])
                 candidatos = datos.get("candidatos", [])
 
-                _motivo_text = ft.Text(
-                    "Registra el motivo para poder efectuar la sustitución",
-                    size=14, color=TEXT_SECONDARY, italic=True,
-                )
-
                 async def _abrir_dialogo_motivo(e=None):
                     campo = ft.TextField(
                         label="Motivo",
                         value=_motivo_actual,
-                        multiline=True,
-                        min_lines=3,
-                        max_lines=5,
-                        bgcolor="#111111",
-                        border_color="#333333",
-                        focused_border_color="#555555",
-                        border_radius=10,
-                        color=TEXT,
+                        multiline=True, min_lines=3, max_lines=5,
+                        border_color=DIVIDER, focused_border_color=PRIMARY,
+                        text_style=ft.TextStyle(color=TEXT_TABLE, size=13),
+                        label_style=ft.TextStyle(color=TEXT_SECONDARY),
+                        cursor_color=PRIMARY,
                     )
 
                     async def guardar_motivo(e):
@@ -203,7 +241,7 @@ def build(page: ft.Page, on_sustitucion_completada=None):
                             _motivo_text.color = TEXT
                             _motivo_text.italic = False
                         else:
-                            _motivo_text.value = "Registra el motivo para poder efectuar la sustitución"
+                            _motivo_text.value = "Clic para registrar motivo"
                             _motivo_text.color = TEXT_SECONDARY
                             _motivo_text.italic = True
                         page.pop_dialog()
@@ -213,96 +251,92 @@ def build(page: ft.Page, on_sustitucion_completada=None):
                         title=ft.Text("Motivo de la sustitución", size=20, weight=ft.FontWeight.BOLD, color=TEXT),
                         content=ft.Column([campo], tight=True),
                         bgcolor=SURFACE,
+                        shape=ft.RoundedRectangleBorder(radius=12),
                         actions=[
                             ft.OutlinedButton("Cancelar", on_click=lambda e: page.pop_dialog(),
-                                              style=ft.ButtonStyle(color=TEXT_SECONDARY, overlay_color="#333333", side=ft.BorderSide(0))),
+                                style=ft.ButtonStyle(color=TEXT_SECONDARY, side=ft.BorderSide(1, DIVIDER))),
                             ft.FilledButton("Guardar", on_click=guardar_motivo,
-                                            style=ft.ButtonStyle(bgcolor=PRIMARY, color=ft.Colors.WHITE)),
+                                style=ft.ButtonStyle(bgcolor=BTN_BG, color=BTN_TEXT)),
                         ],
+                        actions_alignment=ft.MainAxisAlignment.END,
                     )
                     page.show_dialog(dialogo)
 
-                def _motivo_hover(e):
-                    e.control.bgcolor = "#191919" if e.data else SURFACE
-                    e.control.update()
-
-                def _build_info_card():
-                    return ft.Container(
-                        content=ft.Row([
-                            ft.Container(width=6, bgcolor="#444444", border_radius=2),
-                            ft.Container(
-                                content=ft.Column([
-                                    ft.Text("Guardia a reemplazar", size=17, color=TEXT, weight=ft.FontWeight.BOLD),
-                                    ft.Container(height=10),
-                                    ft.Text(f"{asig_original['dia']} {selector_mes.value}  ·  {asig_original['turno'].capitalize()}  ·  {asig_original['punto']}",
-                                            size=14, color=TEXT_SECONDARY),
-                                ], spacing=0),
-                                padding=ft.Padding(left=12, top=12, right=12, bottom=12),
-                                expand=True,
-                            ),
-                        ], spacing=0),
-                        bgcolor=SURFACE,
-                        border_radius=16,
-                        height=125,
-                        expand=True,
-                        padding=0,
-                    )
-
-                def _build_soldado_card():
-                    return ft.Container(
-                        content=ft.Row([
-                            ft.Container(width=6, bgcolor="#444444", border_radius=2),
-                            ft.Container(
-                                content=ft.Column([
-                                    ft.Text("Soldado", size=17, color=TEXT, weight=ft.FontWeight.BOLD),
-                                    ft.Container(height=10),
-                                    ft.Text(asig_original.get('rango', '').capitalize(),
-                                            size=14, color=TEXT_SECONDARY),
-                                    ft.Container(height=4),
-                                    ft.Text(f"{asig_original['nombre']} {asig_original['apellido']}  ·  {asig_original['cedula']}  ·  {asig_original.get('unidad', '').capitalize()}",
-                                            size=14, color=TEXT_SECONDARY),
-                                ], spacing=0),
-                                padding=ft.Padding(left=12, top=12, right=12, bottom=12),
-                                expand=True,
-                            ),
-                        ], spacing=0),
-                        bgcolor=SURFACE,
-                        border_radius=16,
-                        height=125,
-                        expand=True,
-                        padding=0,
-                    )
-
-                def _build_motivo_card():
-                    return ft.Container(
-                        content=ft.Row([
-                            ft.Container(width=6, bgcolor="#444444", border_radius=2),
-                            ft.Container(
-                                content=ft.Column([
-                                    ft.Text("Motivo de la sustitución", size=17, color=TEXT, weight=ft.FontWeight.BOLD),
-                                    ft.Container(height=10),
-                                    _motivo_text,
-                                ], spacing=0),
-                                padding=ft.Padding(left=12, top=12, right=12, bottom=12),
-                                expand=True,
-                            ),
-                        ], spacing=0),
-                        bgcolor=SURFACE,
-                        border_radius=16,
-                        height=125,
-                        expand=True,
-                        padding=0,
-                        on_click=lambda e: page.run_task(_abrir_dialogo_motivo),
-                        on_hover=_motivo_hover,
-                    )
-
-                zona_resultados.controls.append(
-                    ft.Row([
-                        _build_info_card(),
-                        _build_soldado_card(),
-                        _build_motivo_card(),
-                    ], spacing=20)
+                _motivo_text = ft.Text(
+                    "Clic para registrar motivo",
+                    size=13, color=TEXT_SECONDARY, italic=True,
                 )
+
+                info_guardia_card = ft.Container(
+                    content=ft.Column([
+                        ft.Row([
+                            ft.Icon(ft.Icons.CALENDAR_TODAY, size=18, color=PRIMARY),
+                            ft.Text("Guardia a reemplazar", size=15, weight=ft.FontWeight.BOLD, color=TEXT),
+                        ], spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                        ft.Divider(height=1, color=DIVIDER),
+                        ft.Text(f"Día {asig_original['dia']} · {selector_mes.value}", size=15, color=TEXT),
+                        ft.Container(height=6),
+                        ft.Text(f"{asig_original['turno'].capitalize()} · {asig_original['punto']}", size=14, color=TEXT_SECONDARY),
+                    ], spacing=8),
+                    bgcolor=SURFACE,
+                    border_radius=12,
+                    padding=ft.Padding(16, 16, 16, 16),
+                    expand=True,
+                    height=140,
+                )
+
+                info_soldado_card = ft.Container(
+                    content=ft.Column([
+                        ft.Row([
+                            ft.Icon(ft.Icons.PERSON, size=18, color=PRIMARY),
+                            ft.Text("Soldado", size=15, weight=ft.FontWeight.BOLD, color=TEXT),
+                        ], spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                        ft.Divider(height=1, color=DIVIDER),
+                        ft.Text(f"{asig_original['nombre']} {asig_original['apellido']}", size=15, color=TEXT),
+                        ft.Container(height=6),
+                        ft.Text(f"{asig_original.get('rango', '').capitalize()} · C.I. {asig_original['cedula']}", size=14, color=TEXT_SECONDARY),
+                    ], spacing=8),
+                    bgcolor=SURFACE,
+                    border_radius=12,
+                    padding=ft.Padding(16, 16, 16, 16),
+                    expand=True,
+                    height=140,
+                )
+
+                motivo_card = ft.Container(
+                    content=ft.Column([
+                        ft.Row([
+                            ft.Icon(ft.Icons.EDIT_NOTE, size=18, color=PRIMARY),
+                            ft.Text("Motivo", size=15, weight=ft.FontWeight.BOLD, color=TEXT),
+                        ], spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                        ft.Divider(height=1, color=DIVIDER),
+                        _motivo_text,
+                    ], spacing=8),
+                    bgcolor=SURFACE,
+                    border_radius=12,
+                    padding=ft.Padding(16, 16, 16, 16),
+                    expand=True,
+                    height=140,
+                    on_click=lambda e: page.run_task(_abrir_dialogo_motivo),
+                )
+                motivo_card.cursor = "pointer"
+
+                def _motivo_hover(e):
+                    if e.data:
+                        motivo_card.bgcolor = HOVER_ROW_BG
+                        motivo_card.shadow = [ft.BoxShadow(blur_radius=10, color="#000000", spread_radius=1, offset=ft.Offset(0, 3))]
+                        motivo_card.scale = ft.Scale(1.01)
+                    else:
+                        motivo_card.bgcolor = SURFACE
+                        motivo_card.shadow = []
+                        motivo_card.scale = ft.Scale(1.0)
+                    motivo_card.update()
+
+                motivo_card.on_hover = _motivo_hover
+
+                zona_resultados.controls.append(ft.Container(height=18))
+                zona_resultados.controls.append(ft.Row([info_guardia_card, info_soldado_card, motivo_card], spacing=16, expand=True))
+                zona_resultados.controls.append(ft.Container(height=18))
 
                 if not intercambios and not candidatos:
                     zona_resultados.controls.append(
@@ -316,12 +350,11 @@ def build(page: ft.Page, on_sustitucion_completada=None):
 
                 if intercambios:
                     zona_resultados.controls.append(ft.Divider(height=1, color=DIVIDER))
+                    zona_resultados.controls.append(ft.Container(height=8))
                     zona_resultados.controls.append(
-                        ft.Container(height=8)
+                        ft.Text("TRUEQUES DISPONIBLES", size=16, weight=ft.FontWeight.BOLD, color=TEXT)
                     )
-                    zona_resultados.controls.append(
-                        ft.Text("Trueques disponibles", size=24, color=TEXT, weight=ft.FontWeight.BOLD)
-                    )
+                    zona_resultados.controls.append(ft.Container(height=12))
                     trueque_cards = []
                     for inter in intercambios:
                         info = f"Intercambia su guardia del día {inter['dia_B']} ({inter['turno_B']})"
@@ -347,22 +380,18 @@ def build(page: ft.Page, on_sustitucion_completada=None):
                                         toast(page, data["error"], "error")
                                     else:
                                         toast(page, "Trueque realizado correctamente", "success")
-                                        zona_resultados.controls.clear()
-                                        selector_asignacion.value = None
-                                        if on_sustitucion_completada:
-                                            on_sustitucion_completada()
-                                        page.update()
-                            except Exception as ex:
-                                toast(page, str(ex), "error")
+                                        await _limpiar()
+                            except Exception:
+                                toast(page, "Error inesperado. Intente de nuevo.", "error")
                             finally:
                                 barra_loading.visible = False
                                 page.update()
 
-                        async def confirmar_trueque_click(e):
+                        async def confirmar_trueque_click(e, _inter=inter, _ejecutar=ejecutar_trueque):
                             await abrir_dialogo_confirmar(
-                                f"¿Confirmar el trueque con {inter['nombre_B']} {inter.get('apellido_B', '')}? "
-                                f"Intercambiarán sus guardias del día {asig_original['dia']} y {inter['dia_B']}.",
-                                ejecutar_trueque
+                                f"¿Confirmar el trueque con {_inter['nombre_B']}? "
+                                f"Intercambiarán sus guardias del día {asig_original['dia']} y {_inter['dia_B']}.",
+                                _ejecutar
                             )
 
                         trueque_cards.append(
@@ -378,17 +407,17 @@ def build(page: ft.Page, on_sustitucion_completada=None):
                         for j in range(3):
                             idx = i + j
                             row.append(trueque_cards[idx] if idx < len(trueque_cards) else ft.Container(expand=True))
-                        zona_resultados.controls.append(ft.Row(row, spacing=20))
+                        zona_resultados.controls.append(ft.Row(row, spacing=16, expand=True))
+                        zona_resultados.controls.append(ft.Container(height=16))
 
                 if candidatos:
+                    titulo = "SUSTITUCIONES SIMPLES" if "Ideal" in candidatos[0]["estado"] else "SUSTITUCIONES SIMPLES (CON FATIGA)"
                     zona_resultados.controls.append(ft.Divider(height=1, color=DIVIDER))
+                    zona_resultados.controls.append(ft.Container(height=8))
                     zona_resultados.controls.append(
-                        ft.Container(height=8)
+                        ft.Text(titulo, size=16, weight=ft.FontWeight.BOLD, color=TEXT)
                     )
-                    titulo = "Sustituciones simples" if "Ideal" in candidatos[0]["estado"] else "Sustituciones simples (con fatiga)"
-                    zona_resultados.controls.append(
-                        ft.Text(titulo, size=24, color=TEXT, weight=ft.FontWeight.BOLD)
-                    )
+                    zona_resultados.controls.append(ft.Container(height=12))
                     simple_cards = []
                     for c in candidatos:
                         estado_tag = "✅ Ideal" if "Ideal" in c["estado"] else "⚠️ Con fatiga"
@@ -414,22 +443,18 @@ def build(page: ft.Page, on_sustitucion_completada=None):
                                         toast(page, data["error"], "error")
                                     else:
                                         toast(page, "Sustitución realizada correctamente", "success")
-                                        zona_resultados.controls.clear()
-                                        selector_asignacion.value = None
-                                        if on_sustitucion_completada:
-                                            on_sustitucion_completada()
-                                        page.update()
-                            except Exception as ex:
-                                toast(page, str(ex), "error")
+                                        await _limpiar()
+                            except Exception:
+                                toast(page, "Error inesperado. Intente de nuevo.", "error")
                             finally:
                                 barra_loading.visible = False
                                 page.update()
 
-                        async def confirmar_simple_click(e):
+                        async def confirmar_simple_click(e, _c=c, _ejecutar=ejecutar_simple):
                             await abrir_dialogo_confirmar(
-                                f"¿Confirmar sustitución? {c['nombre']} {c.get('apellido', '')} "
+                                f"¿Confirmar sustitución? {_c['nombre']} "
                                 f"tomará la guardia del día {asig_original['dia']} en {asig_original['punto']}.",
-                                ejecutar_simple
+                                _ejecutar
                             )
 
                         simple_cards.append(
@@ -445,7 +470,8 @@ def build(page: ft.Page, on_sustitucion_completada=None):
                         for j in range(3):
                             idx = i + j
                             row.append(simple_cards[idx] if idx < len(simple_cards) else ft.Container(expand=True))
-                        zona_resultados.controls.append(ft.Row(row, spacing=20))
+                        zona_resultados.controls.append(ft.Row(row, spacing=16, expand=True))
+                        zona_resultados.controls.append(ft.Container(height=16))
 
         except Exception as ex:
             toast(page, f"Error: {ex}", "error")
@@ -453,13 +479,35 @@ def build(page: ft.Page, on_sustitucion_completada=None):
             barra_loading.visible = False
             page.update()
 
-    panel = ft.Column([
-        barra_loading,
-        module_header("Sustitución", "Reemplazo y trueque de guardias"),
-        ft.Divider(height=1, color=DIVIDER),
-        ft.Row([selector_mes, selector_ano, boton_cargar, selector_punto, boton_refrescar_punto, selector_asignacion, boton_buscar], spacing=8),
-        ft.Divider(height=1, color=DIVIDER),
-        zona_resultados,
-    ])
+    form_card = ft.Container(
+        content=ft.Row([
+            selector_mes,
+            selector_ano,
+            selector_punto,
+            ft.FilledButton("Buscar", on_click=lambda e: page.run_task(_llenar_dropdown), icon=ft.Icons.SEARCH,
+                style=ft.ButtonStyle(bgcolor=BTN_BG, color=BTN_TEXT)),
+            selector_asignacion,
+            ft.FilledButton("Cargar Guardias", on_click=lambda e: page.run_task(buscar_candidatos), icon=ft.Icons.REFRESH,
+                style=ft.ButtonStyle(bgcolor=BTN_BG, color=BTN_TEXT)),
+        ], vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=12),
+        padding=ft.Padding(16, 16, 16, 16),
+    )
 
-    return {"panel": panel}
+    panel = ft.Column(
+        [
+            barra_loading,
+            module_header("Sustitución", "Reemplazo y trueque de guardias"),
+            ft.Divider(height=1, color=DIVIDER),
+            form_card,
+            ft.Container(height=8),
+            zona_resultados,
+            no_data_container,
+        ],
+        scroll=ft.ScrollMode.ADAPTIVE,
+        expand=True,
+        horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+    )
+
+    page.run_task(cargar_asignaciones)
+
+    return {"panel": panel, "cargar": cargar_asignaciones}

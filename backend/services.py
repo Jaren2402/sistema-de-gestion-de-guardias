@@ -34,6 +34,7 @@ FACTOR_TURNO = {
     "nocturno": 2.0,
 }
 FACTOR_FIN_SEMANA = 1.5  # Multiplicador adicional para sábado y domingo
+EMA_ALPHA = 0.5  # Suavizado exponencial para carryover entre meses
 
 
 def _log_error(contexto: str, ex: Exception):
@@ -99,22 +100,31 @@ def generar_calendario(mes: int, año: int, usuario_id: int, session: Session) -
                 PuntoGuardia.id_usuario == usuario_id
             )
         ).all()
-        ids_guardias = [g[0] for g in guardias_a_borrar]
+        ids_guardias = [g if isinstance(g, int) else g[0] for g in guardias_a_borrar]
 
         if ids_guardias:
             session.exec(delete(Asignacion).where(Asignacion.id_guardia.in_(ids_guardias)))
             session.exec(delete(Guardia).where(Guardia.id_guardia.in_(ids_guardias)))
         session.commit()
 
-        decay = 0.5
-        if mes == 1:
-            mes_puntos = 12
-            año_puntos = año - 1
-        else:
-            mes_puntos = mes - 1
-            año_puntos = año
-        puntos_arrastre = _calcular_puntos_mes(mes_puntos, año_puntos, usuario_id, session)
+        # =========================================================
+        # Carryover: EMA sobre los últimos 3 meses desde la DB
+        # =========================================================
+        historial = {s.id_soldado: 0.0 for s in soldados}
+        for offset in [3, 2, 1]:
+            m_back = mes - offset
+            a_back = año
+            while m_back < 1:
+                m_back += 12
+                a_back -= 1
+            pts_mes = _calcular_puntos_mes(m_back, a_back, usuario_id, session)
+            for s in soldados:
+                pts = pts_mes.get(s.id_soldado, 0.0)
+                historial[s.id_soldado] = EMA_ALPHA * pts + (1 - EMA_ALPHA) * historial[s.id_soldado]
 
+        # =========================================================
+        # Datos previos: 48h del mes anterior y restricciones
+        # =========================================================
         if mes == 1:
             mes_anterior = 12
             año_anterior = año - 1
@@ -152,11 +162,6 @@ def generar_calendario(mes: int, año: int, usuario_id: int, session: Session) -
             )
         ).all()
 
-        historial = {}
-        for s in soldados:
-            pts_arrastre = puntos_arrastre.get(s.id_soldado, 0.0)
-            historial[s.id_soldado] = pts_arrastre * decay
-
         ultima_fecha = {}
         for s in soldados:
             ultima_fecha[s.id_soldado] = ultima_fecha_previa.get(s.id_soldado, None)
@@ -165,14 +170,13 @@ def generar_calendario(mes: int, año: int, usuario_id: int, session: Session) -
 
         dia_actual = inicio
         while dia_actual < proximo_mes:
-            for turno in ["nocturno", "diurno"]:
+            for turno in ["diurno", "nocturno"]:
                 hora_inicio = 19 if turno == "nocturno" else 7
                 fecha_inicio_turno = dia_actual.replace(hour=hora_inicio)
                 fecha_fin_turno = fecha_inicio_turno + timedelta(hours=12)
 
                 puntos_barajados = list(puntos)
                 random.shuffle(puntos_barajados)
-
                 for punto in puntos_barajados:
                     nueva_guardia = Guardia(
                         fecha_inicio=fecha_inicio_turno,
@@ -200,14 +204,11 @@ def generar_calendario(mes: int, año: int, usuario_id: int, session: Session) -
                     if not candidatos:
                         session.rollback()
                         return {
-                            "error": f"No hay candidatos para el {dia_actual.date()} turno {turno}, punto {punto.nombre}."
+                            "error": "No hay candidatos para el {} turno {}, punto {}.".format(
+                                dia_actual.date(), turno, punto.nombre)
                         }
 
-                    def clave_orden(s: Soldado) -> Tuple[int, int, str]:
-                        prioridad = PRIORIDAD_RANGO.get(s.rango, 99)
-                        return (historial[s.id_soldado], prioridad, s.cedula)
-
-                    elegido = min(candidatos, key=clave_orden)
+                    elegido = min(candidatos, key=lambda s: historial[s.id_soldado])
 
                     nueva_asignacion = Asignacion(
                         id_soldado=elegido.id_soldado,
@@ -227,7 +228,7 @@ def generar_calendario(mes: int, año: int, usuario_id: int, session: Session) -
                         "turno": turno,
                         "punto": punto.nombre,
                         "cedula": elegido.cedula,
-                        "nombre": f"{elegido.nombre} {elegido.apellido}"
+                        "nombre": "{} {}".format(elegido.nombre, elegido.apellido)
                     })
 
             dia_actual += timedelta(days=1)
@@ -991,11 +992,16 @@ def obtener_estadisticas(mes: int, año: int, usuario_id: int, session: Session,
     total_sustituciones = len(sustituciones_data)
     total_restricciones = len(restricciones_data)
 
-    # --- Porcentaje de equidad ---
+    # --- Porcentaje de equidad (desviación promedio sobre la media) ---
     max_puntos = max(s["total_puntos"] for s in lista_soldados) if lista_soldados else 1
     min_puntos = min(s["total_puntos"] for s in lista_soldados) if lista_soldados else 1
     dif = max_puntos - min_puntos
-    equidad_pct = max(0, 1 - (dif / max_puntos)) * 100 if max_puntos > 0 else 100
+    if lista_soldados:
+        media = sum(s["total_puntos"] for s in lista_soldados) / len(lista_soldados)
+        desviacion = sum(abs(s["total_puntos"] - media) for s in lista_soldados) / len(lista_soldados)
+        equidad_pct = max(0, (1 - desviacion / media) * 100) if media > 0 else 100
+    else:
+        equidad_pct = 100
 
     # --- Detalle de sustituciones y restricciones (para mostrar en tablas) ---
     detalle_sustituciones = []
@@ -1040,9 +1046,9 @@ def obtener_estadisticas(mes: int, año: int, usuario_id: int, session: Session,
             m_pts[sid] = m_pts.get(sid, 0) + factor
         pts_list = list(m_pts.values())
         if pts_list:
-            mx_m = max(pts_list)
-            mn_m = min(pts_list)
-            m_pct = max(0, 1 - ((mx_m - mn_m) / mx_m)) * 100 if mx_m > 0 else 100
+            media_m = sum(pts_list) / len(pts_list)
+            desv_m = sum(abs(p - media_m) for p in pts_list) / len(pts_list)
+            m_pct = max(0, (1 - desv_m / media_m) * 100) if media_m > 0 else 100
         else:
             m_pct = 0
         evolucion_equidad.append({
@@ -1123,6 +1129,12 @@ def obtener_historial_sustituciones(mes: int, año: int, usuario_id: int, sessio
         if asignacion_original.es_anulada:
             soldado_original = session.get(Soldado, asignacion_original.id_soldado)
             titular_original = f"{soldado_original.nombre} {soldado_original.apellido}" if soldado_original else ""
+            novedad = session.exec(
+                select(Novedad).where(Novedad.id_asignacion == asignacion.id_asignacion)
+            ).first()
+            motivo = ""
+            if novedad and novedad.descripcion.startswith("SUSTITUCIÓN:"):
+                motivo = novedad.descripcion[len("SUSTITUCIÓN:"):].strip()
             historial.append({
                 "fecha": guardia.fecha_inicio.strftime("%Y-%m-%d"),
                 "turno": guardia.tipo,
@@ -1132,6 +1144,7 @@ def obtener_historial_sustituciones(mes: int, año: int, usuario_id: int, sessio
                 "cedula_sustituto": soldado.cedula,
                 "tipo": "Simple",
                 "id_asignacion": asignacion.id_asignacion,
+                "motivo": motivo,
             })
 
     # --- 2. Trueques (novedades enriquecidas) ---

@@ -80,6 +80,15 @@ def health(session: Session = Depends(get_session)):
     }
 
 
+from pydantic import BaseModel
+
+RANGOS_VALIDOS = {
+    "cabo segundo", "cabo primero", "sargento segundo",
+    "sargento primero", "sargento mayor", "teniente",
+    "primer teniente", "capitán",
+}
+
+
 def get_usuario_id(authorization: str = Header(..., alias="Authorization"), session: Session = Depends(get_session)) -> int:
     if not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Sesión inválida")
@@ -88,6 +97,140 @@ def get_usuario_id(authorization: str = Header(..., alias="Authorization"), sess
     if not sesion:
         raise HTTPException(status_code=401, detail="Sesión inválida")
     return sesion.id_usuario
+
+
+@app.post('/preview-importar')
+async def preview_importar(
+    archivo: UploadFile = File(...),
+    usuario_id: int = Depends(get_usuario_id),
+    session: Session = Depends(get_session)
+):
+    contenido = await archivo.read()
+    if len(contenido) > 100 * 1024 * 1024:
+        return {"error": "El archivo excede el tamaño máximo permitido (100 MB)."}
+
+    try:
+        df = pd.read_excel(io.BytesIO(contenido))
+    except Exception:
+        return {"error": "No se pudo leer el archivo. Verifique que sea un Excel válido."}
+
+    columnas_requeridas = {'cedula', 'nombre', 'apellido', 'rango', 'unidad'}
+    if not columnas_requeridas.issubset(df.columns):
+        return {"error": f"El Excel debe tener las columnas: {', '.join(columnas_requeridas)}"}
+
+    cedulas_existentes = set(
+        session.exec(
+            select(Soldado.cedula).where(Soldado.id_usuario == usuario_id)
+        ).all()
+    )
+
+    filas = []
+    for idx, fila in df.iterrows():
+        cedula = str(fila["cedula"]).strip() if not pd.isna(fila["cedula"]) else ""
+        nombre = str(fila["nombre"]).strip() if not pd.isna(fila["nombre"]) else ""
+        apellido = str(fila["apellido"]).strip() if not pd.isna(fila["apellido"]) else ""
+        rango = str(fila["rango"]).strip() if not pd.isna(fila["rango"]) else ""
+        unidad = str(fila["unidad"]).strip() if not pd.isna(fila["unidad"]) else ""
+
+        errores = []
+        if not cedula:
+            errores.append("Cédula vacía")
+        if not nombre:
+            errores.append("Nombre vacío")
+        if not apellido:
+            errores.append("Apellido vacío")
+        if not rango:
+            errores.append("Rango vacío")
+        elif rango.lower() not in RANGOS_VALIDOS:
+            errores.append(f"Rango no reconocido: {rango}")
+        if not unidad:
+            errores.append("Unidad vacía")
+        if cedula and cedula in cedulas_existentes:
+            errores.append("Cédula ya registrada")
+
+        duplicado_en_excel = any(
+            f["cedula"] == cedula and f["status"] != "duplicado"
+            for f in filas if cedula
+        )
+        if duplicado_en_excel and cedula:
+            errores.append("Duplicado en el archivo")
+
+        status = "ok"
+        if any("vacía" in e or "no reconocido" in e for e in errores):
+            status = "error"
+        elif any("ya registrada" in e or "Duplicado" in e for e in errores):
+            status = "duplicado"
+
+        filas.append({
+            "fila": int(idx),
+            "cedula": cedula,
+            "nombre": nombre,
+            "apellido": apellido,
+            "rango": rango,
+            "unidad": unidad,
+            "status": status,
+            "errores": errores,
+        })
+
+    total = len(filas)
+    validas = sum(1 for f in filas if f["status"] == "ok")
+    con_errores = sum(1 for f in filas if f["status"] == "error")
+    duplicados = sum(1 for f in filas if f["status"] == "duplicado")
+
+    return {
+        "filas": filas,
+        "resumen": {
+            "total": total,
+            "validas": validas,
+            "errores": con_errores,
+            "duplicados": duplicados,
+        },
+    }
+
+
+class ImportarFilasRequest(BaseModel):
+    filas: list[dict]
+
+
+@app.post('/importar_filas')
+async def importar_filas(
+    data: ImportarFilasRequest,
+    usuario_id: int = Depends(get_usuario_id),
+    session: Session = Depends(get_session)
+):
+    insertados = 0
+    omitidos = 0
+
+    for fila in data.filas:
+        cedula = str(fila.get("cedula", "")).strip()
+        if not cedula:
+            omitidos += 1
+            continue
+
+        try:
+            soldado = Soldado(
+                cedula=cedula,
+                nombre=str(fila.get("nombre", "")).strip(),
+                apellido=str(fila.get("apellido", "")).strip(),
+                rango=str(fila.get("rango", "")).strip(),
+                unidad=str(fila.get("unidad", "")).strip(),
+                fecha_registro=datetime.now(),
+                id_usuario=usuario_id,
+            )
+            session.add(soldado)
+            session.flush()
+            session.commit()
+            insertados += 1
+        except IntegrityError:
+            session.rollback()
+            omitidos += 1
+
+    return {
+        "mensaje": f"{insertados} soldados importados correctamente. {omitidos} omitidos.",
+        "insertados": insertados,
+        "omitidos": omitidos,
+    }
+
 
 @app.post('/importar_soldados')
 async def importar_soldados(

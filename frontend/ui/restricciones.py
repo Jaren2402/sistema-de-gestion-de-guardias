@@ -6,24 +6,58 @@ import flet as ft
 import httpx
 from api import get_token
 from config import URL_BACKEND
-from skeleton import hover_row, loading_bar, module_header, no_data, toast
-from skeleton import table_row as sk_row
+from skeleton import confirm_dialog, loading_bar, module_header, no_data, toast
 from theme import *
 
 
-def build(page: ft.Page):
-    """Construye la interfaz de gestión de restricciones: CRUD de períodos no disponibles por soldado."""
-    _datos = []
+def _field_style():
+    return dict(
+        text_style=ft.TextStyle(color=TEXT_TABLE, size=13),
+        label_style=ft.TextStyle(color=TEXT_SECONDARY),
+        border_color=DIVIDER,
+        focused_border_color=PRIMARY,
+        cursor_color=PRIMARY,
+    )
 
-    texto_estado = ft.Text()
-    selector_soldado = ft.Dropdown(label="Soldado", options=[], width=300)
-    campo_motivo = ft.TextField(label="Motivo", width=300)
-    txt_fecha_inicio = ft.TextField(label="Fecha inicio", hint_text="YYYY-MM-DD", width=200)
-    txt_fecha_fin = ft.TextField(label="Fecha fin", hint_text="YYYY-MM-DD", width=200)
-    selector_mes = ft.Dropdown(label="Mes", options=[ft.dropdown.Option(MESES[i]) for i in range(12)], width=100)
-    selector_mes.on_change = lambda e: _filtrar()
-    selector_año = ft.TextField(label="Año", hint_text="2026", width=100, on_change=lambda e: _filtrar())
+
+def build(page: ft.Page):
+    _datos = []
     _exp = [2, 1, 1, 2, 1]
+
+    barra_loading = loading_bar()
+
+    selector_soldado = ft.Dropdown(
+        label="Soldado", options=[], expand=True,
+        text_style=ft.TextStyle(color=TEXT_TABLE, size=13),
+        label_style=ft.TextStyle(color=TEXT_SECONDARY),
+        border_color=DIVIDER, focused_border_color=PRIMARY,
+    )
+    txt_fecha_inicio = ft.TextField(label="Fecha inicio", hint_text="YYYY-MM-DD", expand=True, **_field_style())
+    txt_fecha_fin = ft.TextField(label="Fecha fin", hint_text="YYYY-MM-DD", expand=True, **_field_style())
+    campo_motivo = ft.TextField(label="Motivo", expand=True, **_field_style())
+
+    txt_buscar = ft.TextField(
+        label="Buscar restricción",
+        hint_text="Nombre del soldado o motivo",
+        prefix_icon=ft.Icons.SEARCH,
+        width=300,
+        on_change=lambda e: _filtrar(),
+        **_field_style(),
+    )
+
+    selector_mes = ft.Dropdown(
+        label="Mes", options=[ft.dropdown.Option(MESES[i]) for i in range(12)],
+        width=130,
+        text_style=ft.TextStyle(color=TEXT_TABLE, size=13),
+        label_style=ft.TextStyle(color=TEXT_SECONDARY),
+        border_color=DIVIDER, focused_border_color=PRIMARY,
+    )
+    selector_mes.on_change = lambda e: _filtrar()
+    selector_año = ft.TextField(
+        label="Año", hint_text="2026", width=100,
+        on_change=lambda e: _filtrar(),
+        **_field_style(),
+    )
 
     def _parse_fecha(valor):
         try:
@@ -31,45 +65,34 @@ def build(page: ft.Page):
         except (ValueError, AttributeError):
             return None
 
-    barra_loading = loading_bar()
-    body = ft.Column(controls=[sk_row(_exp) for _ in range(5)], scroll=ft.ScrollMode.ADAPTIVE, expand=True, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
+    body = ft.Column(
+        controls=[], scroll=ft.ScrollMode.ADAPTIVE, expand=True,
+        horizontal_alignment=ft.CrossAxisAlignment.STRETCH, spacing=4,
+    )
 
-    header = ft.Container(
+    header_row = ft.Container(
         content=ft.Row([
-            ft.Container(ft.Text("SOLDADO", size=16, color=TEXT_TABLE, weight=ft.FontWeight.BOLD), expand=_exp[0]),
-            ft.Container(ft.Text("INICIO", size=16, color=TEXT_TABLE, weight=ft.FontWeight.BOLD), expand=_exp[1]),
-            ft.Container(ft.Text("FIN", size=16, color=TEXT_TABLE, weight=ft.FontWeight.BOLD), expand=_exp[2]),
-            ft.Container(ft.Text("MOTIVO", size=16, color=TEXT_TABLE, weight=ft.FontWeight.BOLD), expand=_exp[3]),
-            ft.Container(ft.Text("ACCIONES", size=16, color=TEXT_TABLE, weight=ft.FontWeight.BOLD), expand=_exp[4]),
+            ft.Container(ft.Text("SOLDADO", size=12, color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD), expand=_exp[0], alignment=ft.Alignment(-1, 0)),
+            ft.Container(ft.Text("INICIO", size=12, color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD), expand=_exp[1], alignment=ft.Alignment(-1, 0)),
+            ft.Container(ft.Text("FIN", size=12, color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD), expand=_exp[2], alignment=ft.Alignment(-1, 0)),
+            ft.Container(ft.Text("MOTIVO", size=12, color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD), expand=_exp[3], alignment=ft.Alignment(-1, 0)),
+            ft.Container(ft.Text("ACCIONES", size=12, color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD), expand=_exp[4], alignment=ft.Alignment(-1, 0)),
         ]),
-        bgcolor=SURFACE_LIGHT,
-        padding=ft.Padding(left=16, top=12, right=16, bottom=12),
+        bgcolor=BTN_BG,
+        border_radius=ft.BorderRadius(top_left=10, top_right=10, bottom_left=0, bottom_right=0),
+        padding=ft.Padding(16, 10, 16, 10),
     )
 
     tabla_container = ft.Container(
-        content=ft.Column([header, body]),
+        content=ft.Column([header_row, body]),
         expand=True,
-        bgcolor=TABLE_BG,
-        border_radius=10,
-        clip_behavior=ft.ClipBehavior.HARD_EDGE,
     )
 
     no_data_container = no_data(ft.Icons.BLOCK, "No hay restricciones registradas.")
-    cont_tabla = ft.Row([
-        ft.Container(expand=1),
-        ft.Container(content=tabla_container, expand=6, padding=ft.Padding(left=20, right=20, top=10, bottom=10)),
-        ft.Container(expand=1),
-    ], expand=True, visible=False)
-    txt_buscar = ft.TextField(
-        label="Buscar restricci\u00f3n",
-        hint_text="Nombre del soldado o motivo",
-        prefix_icon=ft.Icons.SEARCH,
-        width=300,
-        on_change=lambda e: _filtrar(),
-    )
+    cont_tabla = ft.Container(content=tabla_container, expand=True, visible=False)
 
     def _filtrar():
-        q = txt_buscar.value.strip().lower()
+        q = (txt_buscar.value or "").strip().lower()
         try:
             mes = MESES.index(selector_mes.value) + 1
             año = int(selector_año.value.strip())
@@ -89,50 +112,57 @@ def build(page: ft.Page):
             filtrados.append(r)
         body.controls.clear()
         for r in filtrados:
-            body.controls.append(hover_row(ft.Container(
+            btn_eliminar = ft.IconButton(
+                icon=ft.Icons.DELETE_OUTLINE, icon_color=TEXT_SECONDARY, icon_size=18,
+                tooltip="Eliminar",
+                on_click=lambda e, rid=r["id"]: _pedir_confirmacion(rid),
+            )
+
+            row = ft.Container(
                 content=ft.Row([
-                    ft.Container(ft.Text(r["nombre"], size=16, color=TEXT_TABLE), expand=_exp[0]),
-                    ft.Container(ft.Text(r["fecha_inicio"], size=16, color=TEXT_TABLE), expand=_exp[1]),
-                    ft.Container(ft.Text(r["fecha_fin"], size=16, color=TEXT_TABLE), expand=_exp[2]),
-                    ft.Container(ft.Text(r["motivo"], size=16, color=TEXT_TABLE), expand=_exp[3]),
-                    ft.Container(ft.IconButton(icon=ft.Icons.DELETE, icon_size=18,
-                                                on_click=lambda e, rid=r["id"]: _pedir_confirmacion(rid),
-                                                style=ft.ButtonStyle(
-                                                    color={"default": TEXT_SECONDARY, "hovered": ft.Colors.WHITE},
-                                                    bgcolor={"hovered": BTN_DANGER},
-                                                )),
-                                 expand=_exp[4]),
+                    ft.Container(ft.Text(r["nombre"], size=14, color=TEXT_TABLE, weight=ft.FontWeight.W_500), expand=_exp[0], alignment=ft.Alignment(-1, 0)),
+                    ft.Container(ft.Text(r["fecha_inicio"], size=14, color=TEXT_TABLE, weight=ft.FontWeight.W_500), expand=_exp[1], alignment=ft.Alignment(-1, 0)),
+                    ft.Container(ft.Text(r["fecha_fin"], size=14, color=TEXT_TABLE, weight=ft.FontWeight.W_500), expand=_exp[2], alignment=ft.Alignment(-1, 0)),
+                    ft.Container(ft.Text(r["motivo"], size=14, color=TEXT_TABLE, weight=ft.FontWeight.W_500), expand=_exp[3], alignment=ft.Alignment(-1, 0)),
+                    ft.Container(btn_eliminar, expand=_exp[4], alignment=ft.Alignment(-1, 0)),
                 ]),
-                bgcolor=TABLE_ROW,
-                height=40,
-                padding=ft.Padding(left=16, top=0, right=16, bottom=0),
-            )))
+                bgcolor=SURFACE,
+                height=56,
+                padding=ft.Padding(16, 0, 16, 0),
+                border_radius=10,
+            )
+
+            def _make_hover(c):
+                def _on_hover(e):
+                    if e.data:
+                        c.bgcolor = HOVER_ROW_BG
+                        c.shadow = [ft.BoxShadow(blur_radius=8, color="#000000", spread_radius=0, offset=ft.Offset(0, 2))]
+                        c.scale = ft.Scale(1.005)
+                    else:
+                        c.bgcolor = SURFACE
+                        c.shadow = []
+                        c.scale = ft.Scale(1.0)
+                    c.update()
+                return _on_hover
+
+            row.on_hover = _make_hover(row)
+            body.controls.append(row)
         hay = len(filtrados) > 0
         cont_tabla.visible = hay
         no_data_container.visible = not hay
         page.update()
 
     def _pedir_confirmacion(rid):
-        dlg = ft.AlertDialog(
-            title=ft.Text("Eliminar restricci\u00f3n"),
-            content=ft.Text("\u00bfEst\u00e1 seguro de eliminar esta restricci\u00f3n?"),
-            actions=[
-                ft.TextButton("Cancelar", on_click=lambda e: _cerrar_dlg(dlg)),
-                ft.FilledButton("Eliminar", on_click=lambda e: page.run_task(_eliminar_con_confirmacion, dlg, rid)),
-            ],
-            actions_alignment=ft.MainAxisAlignment.END,
+        async def _confirmar():
+            await eliminar(rid)
+        confirm_dialog(
+            page,
+            title="Eliminar restricción",
+            message="¿Está seguro de eliminar esta restricción?",
+            button_label="Eliminar",
+            on_confirm=_confirmar,
+            destructive=True,
         )
-        page.show_dialog(dlg)
-        page.update()
-
-    def _cerrar_dlg(dlg):
-        dlg.open = False
-        page.update()
-
-    async def _eliminar_con_confirmacion(dlg, rid):
-        dlg.open = False
-        page.update()
-        await eliminar(rid)
 
     async def cargar_dropdown(max_intentos=3):
         intentos = 0
@@ -150,7 +180,6 @@ def build(page: ft.Page):
                             )
                             for s in datos
                         ]
-                        texto_estado.value = ""
                         page.update()
                         return
             except Exception:
@@ -173,12 +202,11 @@ def build(page: ft.Page):
                 if not isinstance(_datos, list):
                     raise TypeError(f"Respuesta inesperada: {type(_datos).__name__}")
                 _filtrar()
-        except Exception as ex:
-            toast(page, f"Error al cargar restricciones: {ex}", "error")
+        except Exception:
+            toast(page, "Error al cargar restricciones.", "error")
             body.controls.clear()
-            body.controls.append(
-                ft.Container(ft.Text(f"Error: {ex}", italic=True, color=TEXT_SECONDARY, size=14),
-                             alignment=ft.Alignment(0, 0), padding=20))
+            cont_tabla.visible = False
+            no_data_container.visible = True
         finally:
             barra_loading.visible = False
             page.update()
@@ -211,13 +239,13 @@ def build(page: ft.Page):
                 if "error" in datos:
                     toast(page, datos["error"], "error")
                 else:
-                    toast(page, "Restricci\u00f3n creada correctamente.", "success")
+                    toast(page, "Restricción creada correctamente.", "success")
                     campo_motivo.value = ""
                     txt_fecha_inicio.value = ""
                     txt_fecha_fin.value = ""
                     await cargar_tabla()
-        except Exception as ex:
-            toast(page, f"Error: {ex}", "error")
+        except Exception:
+            toast(page, "Error inesperado. Intente de nuevo.", "error")
         finally:
             page.update()
 
@@ -230,39 +258,59 @@ def build(page: ft.Page):
                 if "error" in datos:
                     toast(page, datos["error"], "error")
                 else:
-                    toast(page, "Restricci\u00f3n eliminada.", "success")
+                    toast(page, "Restricción eliminada.", "success")
                     await cargar_tabla()
-        except Exception as ex:
-            toast(page, f"Error: {ex}", "error")
+        except Exception:
+            toast(page, "Error inesperado. Intente de nuevo.", "error")
         finally:
             page.update()
 
-    boton_crear = ft.FilledButton(
-        "A\u00f1adir Restricci\u00f3n",
-        on_click=crear,
-        icon=ft.Icons.ADD,
-    )
-    boton_refrescar = ft.FilledButton(
-        "Refrescar",
-        on_click=lambda e: page.run_task(cargar_tabla),
-        icon=ft.Icons.REFRESH,
+    form_card = ft.Container(
+        content=ft.Column([
+            ft.Text("Registrar restricción", size=15, color=TEXT, weight=ft.FontWeight.W_600),
+            ft.Row([selector_soldado, txt_fecha_inicio, txt_fecha_fin, campo_motivo], vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=12),
+            ft.Row([
+                txt_buscar,
+                selector_mes,
+                selector_año,
+                ft.Container(expand=True),
+                ft.FilledButton(
+                    "Añadir",
+                    on_click=crear,
+                    icon=ft.Icons.ADD,
+                    style=ft.ButtonStyle(bgcolor=BTN_BG, color=BTN_TEXT),
+                ),
+                ft.OutlinedButton(
+                    "Refrescar",
+                    on_click=lambda e: page.run_task(cargar_tabla),
+                    icon=ft.Icons.REFRESH,
+                    style=ft.ButtonStyle(
+                        color=TEXT_SECONDARY,
+                        side=ft.BorderSide(1, DIVIDER),
+                    ),
+                ),
+            ], vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=12),
+        ], spacing=12),
+        padding=ft.Padding(16, 16, 16, 16),
     )
 
-    panel = ft.Column([
-        barra_loading,
-        module_header("Restricciones", "Control de fechas no disponibles por soldado"),
-        ft.Divider(height=1, color=DIVIDER),
-        ft.Row([selector_soldado, txt_fecha_inicio, txt_fecha_fin]),
-        ft.Row([campo_motivo, boton_crear]),
-        ft.Divider(height=1, color=DIVIDER),
-        ft.Row([boton_refrescar, txt_buscar, selector_mes, selector_año]),
-        cont_tabla,
-        no_data_container,
-    ])
+    panel = ft.Column(
+        [
+            barra_loading,
+            module_header("Restricciones", "Control de fechas no disponibles por soldado"),
+            ft.Divider(height=1, color=DIVIDER),
+            form_card,
+            ft.Container(height=8),
+            cont_tabla,
+            no_data_container,
+        ],
+        scroll=ft.ScrollMode.ADAPTIVE,
+        expand=True,
+        horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+    )
 
     return {
         "panel": panel,
         "cargar_dropdown": cargar_dropdown,
         "cargar_tabla": cargar_tabla,
-        "texto_estado": texto_estado,
     }
