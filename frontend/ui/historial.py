@@ -96,39 +96,23 @@ def build(page: ft.Page):
             icono = ft.Icons.SWAP_HORIZ
             icono_color = SHIFT_DIURNO
             titulo = f'{item["fecha"]}  ·  {item["turno"].capitalize()}  ·  {item["punto"]}'
-            sub_lineas = [
-                ft.Text(item.get("texto_trueque", ""), size=15, color=TEXT_TABLE),
-            ]
+            texto = item.get("texto_trueque", "")
             if item.get("motivo"):
-                sub_lineas.append(ft.Container(height=2))
-                sub_lineas.append(ft.Row([
-                    ft.Icon(ft.Icons.DESCRIPTION, size=14, color=TEXT_SECONDARY),
-                    ft.Text(item["motivo"], size=14, color=TEXT_SECONDARY, italic=True),
-                ], spacing=6))
+                texto += f"  —  {item['motivo']}"
+            sub_lineas = [ft.Text(texto, size=15, color=TEXT_TABLE)]
         else:
             badge_bg = BTN_BG
             badge_text = "SUSTITUCIÓN"
             icono = ft.Icons.FIND_REPLACE
             icono_color = BTN_BG
             titulo = f'{item["fecha"]}  ·  {item["turno"].capitalize()}  ·  {item["punto"]}'
-            sub_lineas = [
-                ft.Row([
-                    ft.Text("Titular: ", size=14, color=TEXT_SECONDARY),
-                    ft.Text(item["titular_original"], size=15, color=TEXT_TABLE),
-                ], spacing=4),
-                ft.Row([
-                    ft.Text("Sustituto: ", size=14, color=TEXT_SECONDARY),
-                    ft.Text(item["sustituto"], size=15, color=TEXT_TABLE),
-                ], spacing=4),
-            ]
-            if item.get("cedula_sustituto"):
-                sub_lineas.append(ft.Text(f"C.I. {item['cedula_sustituto']}", size=14, color=TEXT_SECONDARY))
+            dia = item["fecha"].split("-")[2] if item.get("fecha") else ""
+            texto = f"{item['sustituto']} reemplaza a {item['titular_original']}"
+            if dia:
+                texto += f" (Día {dia})"
             if item.get("motivo"):
-                sub_lineas.append(ft.Container(height=2))
-                sub_lineas.append(ft.Row([
-                    ft.Icon(ft.Icons.DESCRIPTION, size=14, color=TEXT_SECONDARY),
-                    ft.Text(item["motivo"], size=14, color=TEXT_SECONDARY, italic=True),
-                ], spacing=6))
+                texto += f"  —  {item['motivo']}"
+            sub_lineas = [ft.Text(texto, size=15, color=TEXT_TABLE)]
 
         card = ft.Container(
             content=ft.Column([
