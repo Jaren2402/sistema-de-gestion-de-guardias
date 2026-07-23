@@ -40,7 +40,7 @@ def build(page: ft.Page):
 
     no_data_container = no_data(ft.Icons.HISTORY, "No hay sustituciones registradas este mes")
 
-    resultados_container = ft.Column(spacing=10, scroll=ft.ScrollMode.ADAPTIVE)
+    resultados_container = ft.Column(spacing=10, scroll=ft.ScrollMode.ADAPTIVE, expand=True)
 
     def _filtrar(e=None):
         texto_busqueda = (search_field.value or "").strip().lower()
