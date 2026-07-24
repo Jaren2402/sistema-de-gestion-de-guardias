@@ -508,6 +508,4 @@ def build(page: ft.Page):
         horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
     )
 
-    page.run_task(cargar_asignaciones)
-
     return {"panel": panel, "cargar": cargar_asignaciones}
