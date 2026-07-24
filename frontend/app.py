@@ -288,6 +288,7 @@ async def main(page: ft.Page):
             page.run_task(mod_ficha["cargar_dropdown"])
             page.run_task(mod_gestion["cargar_tabla"])
             page.run_task(mod_puntos["cargar_tabla"])
+            page.run_task(mod_sustitucion["cargar"])
         except Exception:
             page.add(ft.Container(
                 ft.Text("Error inesperado. Recargue la página o inicie sesión nuevamente.",
